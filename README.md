@@ -1,385 +1,385 @@
-# IoT Fire Prevention Platform - Automated Installer
+# IoT Fire Prevention Platform - Instalador Automatizado
 
-Complete automated installation system for deploying the IoT Fire Prevention Platform on Debian 13 VPS.
+Sistema de instalación automatizada completo para desplegar la Plataforma de Prevención de Incendios IoT en VPS Debian 13.
 
-## 📦 What's Included
+## 📦 Qué Incluye
 
-### Core Installation Scripts
-- `install.sh` - Main installation script with dry-run and resume capabilities
-- `lib/common.sh` - Logging, error handling, utilities
-- `lib/ui.sh` - Terminal UI, progress bars, banners
-- `lib/validation.sh` - Input validation functions
-- `lib/secrets.sh` - Secure secret generation
-- `lib/phases.sh` - All 13 installation phases
+### Scripts de Instalación Principal
+- `install.sh` - Script principal de instalación con capacidades de ejecución en seco y reanudación
+- `lib/common.sh` - Registro de eventos, manejo de errores y utilidades
+- `lib/ui.sh` - Interfaz de usuario terminal, barras de progreso y banners
+- `lib/validation.sh` - Funciones de validación de entradas
+- `lib/secrets.sh` - Generación segura de secretos
+- `lib/phases.sh` - Las 13 fases de instalación
 
-### Configuration Templates
-- `templates/docker-compose.yml.tpl` - Docker orchestration
-- `templates/env.tpl` - Environment variables
-- `templates/nftables.conf.tpl` - Firewall rules
-- `templates/fail2ban-*.tpl` - Intrusion prevention
-- `templates/nginx*.tpl` - Reverse proxy
-- `templates/mysql-init.sql.tpl` - Database initialization
+### Plantillas de Configuración
+- `templates/docker-compose.yml.tpl` - Orquestación de Docker
+- `templates/env.tpl` - Variables de entorno
+- `templates/nftables.conf.tpl` - Reglas de firewall
+- `templates/fail2ban-*.tpl` - Prevención de intrusiones
+- `templates/nginx*.tpl` - Proxy inverso
+- `templates/mysql-init.sql.tpl` - Inicialización de base de datos
 
-### FastAPI Application (25+ files)
-Complete production-ready FastAPI backend with:
-- 4 authentication types (User, Admin, Manager, Device)
-- Cryptographic device authentication (AES-256 + HMAC-SHA256)
-- 14 MySQL tables with RBAC
-- Single session enforcement via Redis
+### Aplicación FastAPI (más de 25 archivos)
+Backend FastAPI completo y listo para producción con:
+- 4 tipos de autenticación (Usuario, Admin, Gerente, Dispositivo)
+- Autenticación criptográfica de dispositivos (AES-256 + HMAC-SHA256)
+- 14 tablas MySQL con RBAC
+- Aplicación de sesión única mediante Redis
 
-## 🚀 Quick Start
+## 🚀 Inicio Rápido
 
-### Prerequisites
-- Fresh Debian 13 (Trixie) VPS
-- Root or sudo access
-- Minimum 4GB RAM, 20GB disk
-- Stable internet connection
+### Requisitos Previos
+- VPS Debian 13 (Trixie) limpio
+- Acceso root o sudo
+- Mínimo 4GB RAM, 20GB disco
+- Conexión a internet estable
 
-### Installation
+### Instalación
 
 ```bash
-# 1. Clone repository
+# 1. Clonar repositorio
 git clone https://github.com/agustinra24/auto-iotserver.git
 cd iot-platform-installer
 
-# 2. Make executable
+# 2. Hacer ejecutable
 chmod +x install.sh
 
-# 3. Preview installation (recommended)
+# 3. Previsualizar instalación (recomendado)
 sudo ./install.sh --dry-run
 
-# 4. Run installation
+# 4. Ejecutar instalación
 sudo ./install.sh
 ```
 
-### Interactive Prompts
+### Solicitudes Interactivas
 
-The installer will ask for:
-- VPS IP address (auto-detected)
-- New username (default: iotadmin)
-- SSH port (default: 5259)
-- Domain name (optional)
-- MySQL database name (default: iot_platform)
-- Docker subnet (default: 172.20.0.0/16)
-- Redis memory limit (default: 256MB)
-- Timezone (auto-detected)
+El instalador solicitará:
+- Dirección IP del VPS (auto-detectada)
+- Nuevo nombre de usuario (predeterminado: iotadmin)
+- Puerto SSH (predeterminado: 5259)
+- Nombre de dominio (opcional)
+- Nombre de base de datos MySQL (predeterminado: iot_platform)
+- Subred Docker (predeterminado: 172.20.0.0/16)
+- Límite de memoria Redis (predeterminado: 256MB)
+- Zona horaria (auto-detectada)
 
-All passwords and secrets are auto-generated securely.
+Todas las contraseñas y secretos se generan automáticamente de forma segura.
 
-## 📋 Installation Phases
+## 📋 Fases de Instalación
 
-### Phase 0: Preparation (10 min)
-- System requirements validation
-- Directory structure creation
-- Template verification
+### Fase 0: Preparación (10 min)
+- Validación de requisitos del sistema
+- Creación de estructura de directorios
+- Verificación de plantillas
 
-### Phase 1: User Management (15 min) ⚠️ REQUIRES VALIDATION
-- System package updates
-- New user creation with sudo
-- **CRITICAL PAUSE**: Validate new user in second terminal
-- Remove default debian user
-- Configure hostname and timezone
+### Fase 1: Gestión de Usuarios (15 min) ⚠️ REQUIERE VALIDACIÓN
+- Actualización de paquetes del sistema
+- Creación de nuevo usuario con sudo
+- **PAUSA CRÍTICA**: Validar nuevo usuario en segunda terminal
+- Eliminar usuario debian predeterminado
+- Configurar nombre de host y zona horaria
 
-### Phase 2: Core Dependencies (10 min)
-- Build tools (gcc, git, curl)
+### Fase 2: Dependencias Principales (10 min)
+- Herramientas de compilación (gcc, git, curl)
 - Python 3 + pip
-- Network utilities
-- Monitoring tools
+- Utilidades de red
+- Herramientas de monitoreo
 
-### Phase 3: Firewall (20 min)
-- Disable UFW
-- Install and configure nftables
-- Create dynamic IP sets for Fail2Ban
-- Emergency firewall disable script
+### Fase 3: Firewall (20 min)
+- Deshabilitar UFW
+- Instalar y configurar nftables
+- Crear conjuntos de IP dinámicos para Fail2Ban
+- Script de deshabilitación de firewall de emergencia
 
-### Phase 4: Fail2Ban (15 min)
-- Install Fail2Ban
-- Custom nftables action
-- SSH, Nginx, and API jails
-- Integration testing
+### Fase 4: Fail2Ban (15 min)
+- Instalar Fail2Ban
+- Acción personalizada para nftables
+- Cárceles para SSH, Nginx y API
+- Pruebas de integración
 
-### Phase 5: SSH Hardening (20 min) ⚠️ REQUIRES VALIDATION
-- Backup SSH config
-- Change port 22 → custom port
-- **CRITICAL PAUSE**: Test new SSH port in second terminal
-- Disable root login
-- Close port 22
+### Fase 5: Endurecimiento SSH (20 min) ⚠️ REQUIERE VALIDACIÓN
+- Respaldar configuración SSH
+- Cambiar puerto 22 → puerto personalizado
+- **PAUSA CRÍTICA**: Probar nuevo puerto SSH en segunda terminal
+- Deshabilitar inicio de sesión root
+- Cerrar puerto 22
 
-### Phase 6: Docker (15 min)
-- Remove old Docker versions
-- Add Docker repository
-- Install Docker + Docker Compose
-- Configure daemon
-- Add user to docker group
+### Fase 6: Docker (15 min)
+- Eliminar versiones antiguas de Docker
+- Añadir repositorio de Docker
+- Instalar Docker + Docker Compose
+- Configurar daemon
+- Añadir usuario al grupo docker
 
-### Phase 7: Project Structure (10 min)
-- Create ~/iot-platform directory
-- Generate .env file
-- Copy templates
-- Set permissions
+### Fase 7: Estructura del Proyecto (10 min)
+- Crear directorio ~/iot-platform
+- Generar archivo .env
+- Copiar plantillas
+- Establecer permisos
 
-### Phase 8: FastAPI Application (25 min)
-- Copy all application files (25+ files)
-- Create Python package structure
-- Build Docker image
+### Fase 8: Aplicación FastAPI (25 min)
+- Copiar todos los archivos de aplicación (más de 25 archivos)
+- Crear estructura de paquete Python
+- Construir imagen Docker
 
-### Phase 9: MySQL Initialization (20 min)
-- Generate password hashes for test users
-- Create init.sql with 14 tables
-- Setup RBAC (roles, permissions)
-- Insert test data
+### Fase 9: Inicialización MySQL (20 min)
+- Generar hashes de contraseña para usuarios de prueba
+- Crear init.sql con 14 tablas
+- Configurar RBAC (roles, permisos)
+- Insertar datos de prueba
 
-### Phase 10: Nginx (15 min)
-- Main nginx.conf
-- Site configuration
-- Rate limiting zones
-- Security headers
+### Fase 10: Nginx (15 min)
+- nginx.conf principal
+- Configuración del sitio
+- Zonas de limitación de tasa
+- Cabeceras de seguridad
 
-### Phase 11: Deployment (20 min)
-- Create docker-compose.yml
-- Start all services
-- Wait for health checks
-- Verify containers
+### Fase 11: Despliegue (20 min)
+- Crear docker-compose.yml
+- Iniciar todos los servicios
+- Esperar verificaciones de salud
+- Verificar contenedores
 
-### Phase 12: Testing (20 min)
-- Health endpoint test
-- Authentication tests (4 types)
-- Database isolation verification
-- Container status check
+### Fase 12: Pruebas (20 min)
+- Prueba de endpoint de salud
+- Pruebas de autenticación (4 tipos)
+- Verificación de aislamiento de base de datos
+- Verificación de estado de contenedores
 
-**Total Time**: ~3 hours 15 minutes
+**Tiempo Total**: ~3 horas 15 minutos
 
-## 🔒 Security Features
+## 🔒 Características de Seguridad
 
-### 5-Layer Defense
-1. **nftables** - Perimeter firewall with rate limiting
-2. **Fail2Ban** - Intrusion detection and auto-ban
-3. **Nginx** - Reverse proxy with rate limiting
-4. **FastAPI** - JWT validation + Redis sessions
-5. **Database** - Network isolated, authentication required
+### Defensa de 5 Capas
+1. **nftables** - Firewall perimetral con limitación de tasa
+2. **Fail2Ban** - Detección de intrusiones y bloqueo automático
+3. **Nginx** - Proxy inverso con limitación de tasa
+4. **FastAPI** - Validación JWT + sesiones Redis
+5. **Base de datos** - Aislamiento de red, autenticación requerida
 
-### Zero Database Exposure
-- All databases on internal Docker network only
-- NO ports exposed to host
-- Verification: `nc -zv localhost 3306` must FAIL
+### Cero Exposición de Base de Datos
+- Todas las bases de datos solo en red interna Docker
+- SIN puertos expuestos al host
+- Verificación: `nc -zv localhost 3306` debe FALLAR
 
-### Single Session Enforcement
-- One user = one active session maximum
-- Redis tracks JWT ID (JTI)
-- Second login → 409 Conflict
-- Logout invalidates token immediately
+### Aplicación de Sesión Única
+- Un usuario = una sesión activa máximo
+- Redis rastrea ID de JWT (JTI)
+- Segundo inicio de sesión → 409 Conflicto
+- Cierre de sesión invalida token inmediatamente
 
-### Cryptographic Device Authentication
-- NOT simple API key verification
-- Zero-knowledge proof-like mechanism
-- Device proves possession of encryption_key without transmitting it
-- Implementation: AES-256-CBC + HMAC-SHA256
+### Autenticación Criptográfica de Dispositivos
+- NO es verificación simple de API key
+- Mecanismo tipo prueba de conocimiento cero
+- El dispositivo demuestra posesión de encryption_key sin transmitirla
+- Implementación: AES-256-CBC + HMAC-SHA256
 
-## 📁 Generated Files & Secrets
+## 📁 Archivos Generados y Secretos
 
-### Secrets File
-Location: `~/.iot-platform/.secrets`
-Permissions: 600 (readable only by owner)
+### Archivo de Secretos
+Ubicación: `~/.iot-platform/.secrets`
+Permisos: 600 (legible solo por el propietario)
 
-Contains:
-- MySQL root password
-- MySQL user password
-- Redis password
-- MongoDB password (future)
-- JWT secret key (HS256)
-- Device encryption keys
+Contiene:
+- Contraseña root de MySQL
+- Contraseña de usuario MySQL
+- Contraseña de Redis
+- Contraseña de MongoDB (futuro)
+- Clave secreta JWT (HS256)
+- Claves de cifrado de dispositivos
 
-**⚠️ CRITICAL: Backup this file immediately after installation!**
+**⚠️ CRÍTICO: ¡Respalda este archivo inmediatamente después de la instalación!**
 
-### Configuration File
-Location: `~/iot-platform/.env`
-Loaded by Docker Compose
+### Archivo de Configuración
+Ubicación: `~/iot-platform/.env`
+Cargado por Docker Compose
 
-### Logs
-- Installation log: `./logs/install-YYYYMMDD-HHMMSS.log`
-- Nginx logs: `~/iot-platform/logs/nginx/`
+### Registros
+- Registro de instalación: `./logs/install-YYYYMMDD-HHMMSS.log`
+- Registros de Nginx: `~/iot-platform/logs/nginx/`
 
-## 🔧 Resuming Interrupted Installation
+## 🔧 Reanudar Instalación Interrumpida
 
-If installation is interrupted:
+Si la instalación se interrumpe:
 
 ```bash
 sudo ./install.sh --resume
 ```
 
-The script automatically:
-- Loads saved configuration
-- Loads generated secrets
-- Resumes from last completed phase
+El script automáticamente:
+- Carga configuración guardada
+- Carga secretos generados
+- Reanuda desde la última fase completada
 
-## 🧪 Testing the Installation
+## 🧪 Probar la Instalación
 
-### Health Check
+### Verificación de Salud
 ```bash
 curl http://localhost/health
-# Expected: {"status":"healthy"}
+# Esperado: {"status":"healthy"}
 ```
 
-### Admin Login
+### Inicio de Sesión de Admin
 ```bash
 curl -X POST http://localhost/api/v1/auth/login/admin \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@iot-platform.com","password":"admin123"}'
   
-# Expected: {"access_token":"eyJ...","admin_id":1,"role":"superadmin"}
+# Esperado: {"access_token":"eyJ...","admin_id":1,"role":"superadmin"}
 ```
 
-### Database Isolation Test
+### Prueba de Aislamiento de Base de Datos
 ```bash
-# All must FAIL (connection refused):
+# Todos deben FALLAR (conexión rechazada):
 nc -zv localhost 3306   # MySQL
 nc -zv localhost 6379   # Redis
 nc -zv localhost 27017  # MongoDB
 nc -zv localhost 5000   # FastAPI
 ```
 
-### Container Status
+### Estado de Contenedores
 ```bash
 cd ~/iot-platform
 docker compose ps
-# All services should show "Up (healthy)"
+# Todos los servicios deben mostrar "Up (healthy)"
 ```
 
-## 🌐 Access Information
+## 🌐 Información de Acceso
 
-After successful installation:
+Después de una instalación exitosa:
 
-### SSH Access
+### Acceso SSH
 ```bash
-ssh USERNAME@VPS_IP -p CUSTOM_PORT
+ssh NOMBRE_USUARIO@IP_VPS -p PUERTO_PERSONALIZADO
 ```
 
-### API Endpoints
-- Health: `http://VPS_IP/health`
-- API Docs: `http://VPS_IP/docs`
-- API Base: `http://VPS_IP/api/v1/`
+### Endpoints de API
+- Salud: `http://IP_VPS/health`
+- Documentación API: `http://IP_VPS/docs`
+- Base API: `http://IP_VPS/api/v1/`
 
-### Default Credentials (CHANGE IMMEDIATELY)
+### Credenciales Predeterminadas (CAMBIAR INMEDIATAMENTE)
 - Admin: `admin@iot-platform.com` / `admin123`
-- User: `user@iot-platform.com` / `user123`
-- Manager: `manager@iot-platform.com` / `manager123`
+- Usuario: `user@iot-platform.com` / `user123`
+- Gerente: `manager@iot-platform.com` / `manager123`
 
-## 📚 Next Steps
+## 📚 Próximos Pasos
 
-1. **Backup Secrets**
+1. **Respaldar Secretos**
    ```bash
    cat ~/.iot-platform/.secrets
-   # Copy to secure location
+   # Copiar a ubicación segura
    ```
 
-2. **Change Default Passwords**
-   Use API endpoints to update passwords
+2. **Cambiar Contraseñas Predeterminadas**
+   Usar endpoints de API para actualizar contraseñas
 
-3. **Setup SSL/TLS** (Recommended)
-   - Install certbot
-   - Configure Let's Encrypt
-   - Update Nginx for HTTPS
+3. **Configurar SSL/TLS** (Recomendado)
+   - Instalar certbot
+   - Configurar Let's Encrypt
+   - Actualizar Nginx para HTTPS
 
-4. **Configure Monitoring**
-   - Setup Prometheus + Grafana
-   - Configure alerts
-   - Monitor system resources
+4. **Configurar Monitoreo**
+   - Configurar Prometheus + Grafana
+   - Configurar alertas
+   - Monitorear recursos del sistema
 
-5. **Setup Backups**
-   - Automated MySQL backups
-   - Configuration backups
-   - Secrets backup
+5. **Configurar Respaldos**
+   - Respaldos automáticos de MySQL
+   - Respaldos de configuración
+   - Respaldo de secretos
 
-## 🐛 Troubleshooting
+## 🐛 Solución de Problemas
 
-### Installation Fails at Phase X
-1. Check log file: `./logs/install-*.log`
-2. Review error message
-3. Fix issue manually if needed
-4. Resume: `sudo ./install.sh --resume`
+### La Instalación Falla en Fase X
+1. Revisar archivo de registro: `./logs/install-*.log`
+2. Revisar mensaje de error
+3. Corregir problema manualmente si es necesario
+4. Reanudar: `sudo ./install.sh --resume`
 
-### Cannot Connect via SSH After Phase 5
-1. Use VPS console access (OVHcloud panel)
-2. Check SSH service: `systemctl status sshd`
-3. Check firewall: `nft list ruleset`
-4. Emergency: Run `/usr/local/bin/emergency-disable-firewall.sh`
+### No Puedo Conectarme por SSH Después de Fase 5
+1. Usar acceso a consola VPS (panel OVHcloud)
+2. Verificar servicio SSH: `systemctl status sshd`
+3. Verificar firewall: `nft list ruleset`
+4. Emergencia: Ejecutar `/usr/local/bin/emergency-disable-firewall.sh`
 
-### Docker Services Won't Start
+### Los Servicios Docker No Inician
 ```bash
 cd ~/iot-platform
 docker compose logs
-# Check specific service logs
+# Revisar registros de servicio específico
 ```
 
-### Database Connection Errors
-1. Verify .env file exists and has correct credentials
-2. Check MySQL container: `docker compose logs mysql`
-3. Verify internal network: `docker network ls`
+### Errores de Conexión a Base de Datos
+1. Verificar que archivo .env existe y tiene credenciales correctas
+2. Revisar contenedor MySQL: `docker compose logs mysql`
+3. Verificar red interna: `docker network ls`
 
-## 📖 Documentation
+## 📖 Documentación
 
-- **Full Guide**: GUIA_DEFINITIVA_2.0_COMPLETA.md
-- **Architecture**: ARCHITECTURE_DIAGRAMS.md
-- **Code Reference**: FASTAPI_CODE_REFERENCE.md
-- **Summary**: RESUMEN_GUIA_DEFINITIVA_2.0.md
+- **Guía Completa**: GUIA_DEFINITIVA_2.0_COMPLETA.md
+- **Arquitectura**: ARCHITECTURE_DIAGRAMS.md
+- **Referencia de Código**: FASTAPI_CODE_REFERENCE.md
+- **Resumen**: RESUMEN_GUIA_DEFINITIVA_2.0.md
 
-## ⚙️ System Architecture
+## ⚙️ Arquitectura del Sistema
 
 ```
 Internet
     │
-    └── nftables Firewall (Layer 1)
+    └── Firewall nftables (Capa 1)
             │
-            └── Fail2Ban (Layer 2)
+            └── Fail2Ban (Capa 2)
                     │
-                    └── Nginx :80,:443 (Layer 3)
+                    └── Nginx :80,:443 (Capa 3)
                             │
-                            └── FastAPI :5000 (Layer 4)
+                            └── FastAPI :5000 (Capa 4)
                                     │
-                                    ├── MySQL :3306 (Layer 5)
-                                    ├── Redis :6379 (Layer 5)
-                                    └── MongoDB :27017 (Layer 5 - Future)
+                                    ├── MySQL :3306 (Capa 5)
+                                    ├── Redis :6379 (Capa 5)
+                                    └── MongoDB :27017 (Capa 5 - Futuro)
 
-All databases on isolated Docker network 172.20.0.0/16
+Todas las bases de datos en red Docker aislada 172.20.0.0/16
 ```
 
-## 🔑 Authentication System
+## 🔑 Sistema de Autenticación
 
-### 4 Authentication Types
+### 4 Tipos de Autenticación
 
-1. **User** - `POST /api/v1/auth/login/user`
+1. **Usuario** - `POST /api/v1/auth/login/user`
 2. **Admin** - `POST /api/v1/auth/login/admin`
-3. **Manager** - `POST /api/v1/auth/login/manager`
-4. **Device** - `POST /api/v1/auth/login/device` (with cryptographic puzzles)
+3. **Gerente** - `POST /api/v1/auth/login/manager`
+4. **Dispositivo** - `POST /api/v1/auth/login/device` (con rompecabezas criptográficos)
 
-### Session Management
-- JWT with JTI (unique token ID)
-- Redis stores: `session:{type}:{id} = jti`
-- Single session enforced (second login → 409)
-- Logout deletes Redis key → immediate invalidation
+### Gestión de Sesiones
+- JWT con JTI (ID de token único)
+- Redis almacena: `session:{type}:{id} = jti`
+- Sesión única aplicada (segundo inicio → 409)
+- Cierre de sesión elimina clave Redis → invalidación inmediata
 
-## 💾 Database Schema
+## 💾 Esquema de Base de Datos
 
-14 MySQL Tables:
+14 Tablas MySQL:
 - **RBAC (3)**: rol, permission, rol_permiso
-- **Passwords (4)**: pasadmin, pasusuario, pasgerente, pasdispositivo
-- **Entities (4)**: admin, usuario, manager, device
-- **Services (2)**: service, app
-- **M2M (2)**: servicio_dispositivo, servicio_app (actually 1, making 14 total with the missing servicio_app)
+- **Contraseñas (4)**: pasadmin, pasusuario, pasgerente, pasdispositivo
+- **Entidades (4)**: admin, usuario, manager, device
+- **Servicios (2)**: service, app
+- **M2M (2)**: servicio_dispositivo, servicio_app (en realidad 1, haciendo 14 en total con servicio_app faltante)
 
-## 🤝 Contributing
+## 🤝 Contribuciones
 
-Issues and improvements welcome!
+¡Problemas y mejoras son bienvenidas!
 
-## 📄 License
+## 📄 Licencia
 
-See LICENSE file
+Ver archivo LICENSE
 
-## 👤 Author
+## 👤 Autor
 
-Based on GUIA_DEFINITIVA_2.0_COMPLETA.md
-Automated installer by Agustin
+Basado en GUIA_DEFINITIVA_2.0_COMPLETA.md
+Instalador automatizado por Agustin
 
 ---
 
-**Remember**: Always backup `~/.iot-platform/.secrets` after installation!
+**Recuerda**: ¡Siempre respalda `~/.iot-platform/.secrets` después de la instalación!

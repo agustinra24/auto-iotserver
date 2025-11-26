@@ -39,7 +39,7 @@ Complete production-ready FastAPI backend with:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/user/iot-platform-installer
+git clone https://github.com/agustinra24/auto-iotserver.git
 cd iot-platform-installer
 
 # 2. Make executable

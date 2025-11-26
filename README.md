@@ -264,32 +264,6 @@ ssh NOMBRE_USUARIO@IP_VPS -p PUERTO_PERSONALIZADO
 - Usuario: `user@iot-platform.com` / `user123`
 - Gerente: `manager@iot-platform.com` / `manager123`
 
-## 📚 Próximos Pasos
-
-1. **Respaldar Secretos**
-   ```bash
-   cat ~/.iot-platform/.secrets
-   # Copiar a ubicación segura
-   ```
-
-2. **Cambiar Contraseñas Predeterminadas**
-   Usar endpoints de API para actualizar contraseñas
-
-3. **Configurar SSL/TLS** (Recomendado)
-   - Instalar certbot
-   - Configurar Let's Encrypt
-   - Actualizar Nginx para HTTPS
-
-4. **Configurar Monitoreo**
-   - Configurar Prometheus + Grafana
-   - Configurar alertas
-   - Monitorear recursos del sistema
-
-5. **Configurar Respaldos**
-   - Respaldos automáticos de MySQL
-   - Respaldos de configuración
-   - Respaldo de secretos
-
 ## 🐛 Solución de Problemas
 
 ### La Instalación Falla en Fase X
@@ -378,7 +352,7 @@ Ver archivo LICENSE
 ## 👤 Autor
 
 Basado en GUIA_DEFINITIVA_2.0_COMPLETA.md
-Instalador automatizado por Agustin
+Instalador automatizado por Agustin, Marlene, Sebastian, Gemma
 
 ---
 

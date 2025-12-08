@@ -1,64 +1,77 @@
-"""
-Configuration Settings
-Handles environment variables and Redis connection
-"""
+"""Configuration and Redis Manager"""
 import os
-from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
 import redis
 from typing import Optional
 
-class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "mysql+pymysql://iot_user:password@mysql:3306/iot_platform")
+load_dotenv()
+
+
+class Settings:
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "change-this-secret-key")
+    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
     
     # Redis
-    REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
     REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
     
-    # JWT
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
-    ACCESS_TOKEN_EXPIRE_MINUTES_DEVICE: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES_DEVICE", 1440))
-    
-    class Config:
-        case_sensitive = True
+    # MongoDB
+    MONGO_HOST: str = os.getenv("MONGO_HOST", "localhost")
+    MONGO_PORT: int = int(os.getenv("MONGO_PORT", 27017))
+    MONGO_USER: str = os.getenv("MONGO_USER", "admin")
+    MONGO_PASSWORD: str = os.getenv("MONGO_PASSWORD", "")
+    MONGO_DATABASE: str = os.getenv("MONGO_DATABASE", "iot_sensors")
+    MONGO_AUTH_SOURCE: str = os.getenv("MONGO_AUTH_SOURCE", "admin")
+
 
 settings = Settings()
 
+
 class RedisManager:
-    """Redis connection manager for session management"""
-    def __init__(self):
-        self.client: Optional[redis.Redis] = None
+    """Redis connection manager for user sessions"""
     
-    def connect(self):
-        """Establish Redis connection"""
-        if not self.client:
-            self.client = redis.Redis(
+    _instance: Optional[redis.Redis] = None
+    
+    @classmethod
+    def get_connection(cls) -> redis.Redis:
+        """Get or create Redis connection (singleton)"""
+        if cls._instance is None:
+            cls._instance = redis.Redis(
                 host=settings.REDIS_HOST,
                 port=settings.REDIS_PORT,
-                password=settings.REDIS_PASSWORD,
+                password=settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else None,
                 decode_responses=True,
-                socket_connect_timeout=5
+                socket_connect_timeout=5,
+                socket_timeout=5
             )
+        return cls._instance
     
-    def get_session(self, key: str) -> Optional[str]:
-        """Retrieve session JTI from Redis"""
-        if not self.client:
-            self.connect()
-        return self.client.get(key)
+    @classmethod
+    def save_active_token(cls, user_id: int, user_type: str, jti: str, expires_in: int) -> None:
+        """Save active token JTI to Redis"""
+        redis_conn = cls.get_connection()
+        key = f"session:{user_type}:{user_id}"
+        redis_conn.setex(key, expires_in, jti)
     
-    def set_session(self, key: str, value: str, ttl: int):
-        """Store session JTI in Redis with TTL"""
-        if not self.client:
-            self.connect()
-        self.client.setex(key, ttl, value)
+    @classmethod
+    def get_active_token(cls, user_id: int, user_type: str) -> Optional[str]:
+        """Get active token JTI"""
+        redis_conn = cls.get_connection()
+        key = f"session:{user_type}:{user_id}"
+        return redis_conn.get(key)
     
-    def delete_session(self, key: str):
-        """Remove session from Redis"""
-        if not self.client:
-            self.connect()
-        self.client.delete(key)
-
-redis_manager = RedisManager()
+    @classmethod
+    def delete_active_token(cls, user_id: int, user_type: str) -> None:
+        """Delete active token (logout)"""
+        redis_conn = cls.get_connection()
+        key = f"session:{user_type}:{user_id}"
+        redis_conn.delete(key)
+    
+    @classmethod
+    def is_token_valid(cls, user_id: int, user_type: str, jti: str) -> bool:
+        """Check if token JTI matches active session"""
+        active_jti = cls.get_active_token(user_id, user_type)
+        return active_jti == jti if active_jti else False

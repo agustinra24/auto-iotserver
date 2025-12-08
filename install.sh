@@ -115,15 +115,17 @@ USAGE:
     sudo ./install.sh [OPTIONS]
 
 OPTIONS:
-    --dry-run       Show what will be installed without executing
+    --dry-run       Preview installation steps without executing any changes.
+                    When this flag is used, the interactive menu is skipped
+                    and the script proceeds directly to show the installation plan.
     --resume        Resume from last successful checkpoint
     -h, --help      Show this help message
 
 EXAMPLES:
-    # Normal installation
+    # Normal installation (shows interactive menu)
     sudo ./install.sh
 
-    # Preview installation steps
+    # Preview installation steps (skips menu, no system changes)
     sudo ./install.sh --dry-run
 
     # Resume after interruption
@@ -146,8 +148,7 @@ show_welcome() {
     clear
     show_banner "IoT Fire Prevention Platform"
     
-    cat << EOF
-
+    echo -e "
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
 ${BOLD}              AUTOMATED INSTALLATION SYSTEM v2.0                   ${RESET}
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
@@ -177,11 +178,12 @@ ${GREEN}WHAT YOU'LL GET:${RESET}
   ✓ Single session enforcement per user
 
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
-
-EOF
+"
 
     if [[ "$DRY_RUN" == true ]]; then
-        echo "${CYAN}Running in DRY-RUN mode (no changes will be made)${RESET}"
+        echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════╗${RESET}"
+        echo -e "${CYAN}║  🔍 DRY-RUN MODE ACTIVE - No changes will be made to the system   ║${RESET}"
+        echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${RESET}"
         echo ""
     fi
 }
@@ -191,12 +193,14 @@ EOF
 ################################################################################
 show_main_menu() {
     echo ""
-    echo "${BOLD}Select an option:${RESET}"
+    echo -e "${BOLD}Select an option:${RESET}"
     echo ""
-    echo "  ${GREEN}1)${RESET} Start Installation"
-    echo "  ${CYAN}2)${RESET} Dry-Run (preview steps)"
-    echo "  ${YELLOW}3)${RESET} Resume from checkpoint"
-    echo "  ${RED}4)${RESET} Exit"
+    echo -e "  ${GREEN}1)${RESET} Start Installation ${RED}(will modify your system)${RESET}"
+    echo -e "  ${CYAN}2)${RESET} Dry-Run ${CYAN}(preview only, no changes)${RESET}"
+    echo -e "  ${YELLOW}3)${RESET} Resume from checkpoint"
+    echo -e "  ${RED}4)${RESET} Exit"
+    echo ""
+    echo -e "  ${YELLOW}TIP:${RESET} Use ${CYAN}--dry-run${RESET} flag to skip this menu and preview directly."
     echo ""
     
     local choice
@@ -204,10 +208,22 @@ show_main_menu() {
     
     case $choice in
         1)
-            return 0  # Proceed with installation
+            # Confirm real installation
+            echo ""
+            echo -e "${YELLOW}⚠️  You are about to start a REAL installation.${RESET}"
+            echo -e "${YELLOW}   This will modify your system configuration.${RESET}"
+            read -p "Are you sure? [y/N]: " confirm_install
+            if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
+                log_info "Installation cancelled"
+                show_main_menu
+                return
+            fi
+            DRY_RUN=false  # Explicitly set to false for real installation
+            return 0
             ;;
         2)
             DRY_RUN=true
+            log_info "Entering dry-run mode (no changes will be made)..."
             return 0
             ;;
         3)
@@ -289,8 +305,7 @@ show_configuration_summary() {
     echo ""
     show_section_header "Configuration Summary"
     
-    cat << EOF
-
+    echo -e "
 ${BOLD}System Configuration:${RESET}
   VPS IP:           ${GREEN}${VPS_IP}${RESET}
   New Username:     ${GREEN}${NEW_USERNAME}${RESET}
@@ -311,16 +326,15 @@ ${BOLD}Auto-Generated Secrets:${RESET}
   
 ${YELLOW}Secrets will be saved to: ${SECRETS_FILE}${RESET}
 ${YELLOW}You MUST backup this file after installation!${RESET}
-
-EOF
+"
     
     if [[ "$DRY_RUN" == true ]]; then
-        echo "${CYAN}═══ DRY-RUN MODE: No changes will be made ═══${RESET}"
+        echo -e "${CYAN}═══ DRY-RUN MODE: No changes will be made ═══${RESET}"
         echo ""
     fi
     
     read -p "Proceed with installation? [y/N]: " confirm
-    [[ "$confirm" != "y" ]] && { log_info "Installation cancelled"; exit 0; }
+    if [[ "$confirm" != "y" ]]; then log_info "Installation cancelled"; exit 0; fi
 }
 
 ################################################################################
@@ -367,10 +381,10 @@ execute_installation() {
     fi
     
     # Load configuration
-    source "$CONFIG_FILE"
+    [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
     
     # Generate secrets if not resuming
-    if [[ "$start_phase" -eq 0 ]]; then
+    if [[ "$start_phase" -eq 0 && "$DRY_RUN" != true ]]; then
         generate_all_secrets
     else
         # Load existing secrets
@@ -388,7 +402,11 @@ execute_installation() {
     
     if [[ "$DRY_RUN" == true ]]; then
         show_dry_run_plan
-        return 0
+        if [[ $? -eq 0 ]]; then
+            DRY_RUN=false
+        else
+            return 0
+        fi
     fi
     
     # Execute phases
@@ -451,8 +469,7 @@ show_installation_complete() {
     clear
     show_banner "Installation Complete!"
     
-    cat << EOF
-
+    echo -e "
 ${GREEN}╔═══════════════════════════════════════════════════════════════════╗
 ║                                                                   ║
 ║          ✓ IoT PLATFORM INSTALLED SUCCESSFULLY                    ║
@@ -493,8 +510,7 @@ ${BOLD}Documentation:${RESET}
   Full guide:       GUIA_DEFINITIVA_2.0_COMPLETA.md
 
 ${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}
-
-EOF
+"
 }
 
 ################################################################################
@@ -532,10 +548,17 @@ main() {
     # Pre-flight checks
     preflight_checks
     
-    # Show welcome
+    # Show welcome and menu (skip menu if --dry-run was passed via CLI)
     if [[ "$RESUME_MODE" != true ]]; then
         show_welcome
-        show_main_menu
+        
+        # If --dry-run flag was passed, skip the menu entirely
+        if [[ "$DRY_RUN" == true ]]; then
+            log_info "Dry-run mode activated via --dry-run flag. Skipping menu..."
+            echo ""
+        else
+            show_main_menu
+        fi
     fi
     
     # Collect inputs or load config
@@ -545,11 +568,11 @@ main() {
             exit 1
         fi
         log_info "Loading saved configuration..."
-        source "$CONFIG_FILE"
+        [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
     else
         collect_user_inputs
         show_configuration_summary
-        save_configuration
+        [[ "$DRY_RUN" != true ]] && save_configuration
     fi
     
     # Execute installation

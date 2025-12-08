@@ -1,17 +1,24 @@
 """Service Model"""
-from sqlalchemy import Column, Integer, String, Text, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
+
 class Service(Base):
-    __tablename__ = "service"
+    __tablename__ = "servicio"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    nombre = Column(String(100), nullable=False)
-    tipo = Column(String(50), nullable=False)
-    descripcion = Column(Text)
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(100), nullable=False, index=True)
+    descripcion = Column(Text, nullable=True)
+    fecha_inicio = Column(DateTime, nullable=False)
+    fecha_fin = Column(DateTime, nullable=True)
+    estado = Column(Enum('conectado', 'desconectado', name='estado_servicio'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    gerente_id = Column(Integer, ForeignKey("gerente.id"), nullable=True)
     
-    devices = relationship("Device", secondary="servicio_dispositivo", back_populates="services")
-    apps = relationship("App", secondary="servicio_app", back_populates="services")
+    # Relationships
+    gerente = relationship("Manager", back_populates="servicios")
+    dispositivos = relationship("Device", secondary="servicio_dispositivo", back_populates="servicios")
+    apps = relationship("App", secondary="servicio_app", back_populates="servicios")

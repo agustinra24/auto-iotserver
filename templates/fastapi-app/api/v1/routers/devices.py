@@ -1,103 +1,82 @@
-"""
-Devices Router
-Endpoints for device management
-"""
+"""Devices Router"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+import secrets
 
-from ...database import get_db
-from ...api.deps import get_current_admin
-from ...models.device import Device
-from ...models.pasdispositivo import PasDispositivo
-from ...schemas.device import DeviceCreate, DeviceResponse, DeviceUpdate
-from ...core.secrets import generate_device_api_key
+from database import get_db
+from api.deps import require_permission
+from core.utils import ResponseFormatter
+from models import Device, PasDispositivo, Admin
+from schemas.device import DeviceCreate, DeviceResponse
 
-router = APIRouter(prefix="/devices", tags=["devices"])
+router = APIRouter(tags=["Devices"])
 
-@router.get("/", response_model=List[DeviceResponse])
-def list_devices(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
-):
-    """List all devices (admin only)"""
-    devices = db.query(Device).offset(skip).limit(limit).all()
-    return devices
 
-@router.get("/{device_id}", response_model=DeviceResponse)
-def get_device(
-    device_id: int,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
-):
-    """Get device by ID (admin only)"""
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    return device
-
-@router.post("/", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=None)
 def create_device(
-    device_data: DeviceCreate,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
+    payload: DeviceCreate,
+    current_admin=Depends(require_permission("create_device")),
+    db: Session = Depends(get_db)
 ):
-    """Create new device (admin only)"""
-    # Generate API key
-    api_key = generate_device_api_key()
+    """
+    Create an IoT device.
     
-    # Create device credentials
-    device_creds = PasDispositivo(api_key=api_key)
-    db.add(device_creds)
+    Requires `create_device` permission.
+    Creates pasdispositivo with auto-generated api_key and encryption_key.
+    """
+    try:
+        role_name = getattr(getattr(current_admin, "rol", None), "nombre", None)
+    except Exception:
+        role_name = None
+    
+    if role_name != "admin_master":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Only admin_master can create devices"
+        )
+    
+    admin = db.query(Admin).filter(Admin.id == payload.admin_id).first()
+    if not admin:
+        return ResponseFormatter.error("Admin not found")
+    
+    # Create pasdispositivo with auto-generated api_key and encryption_key
+    pas = PasDispositivo()
+    pas.encryption_key = secrets.token_bytes(32)  # 32 bytes for AES-256
+    db.add(pas)
     db.flush()
     
-    # Create device
     device = Device(
-        nombre=device_data.nombre,
-        device_type=device_data.device_type,
-        admin_id=current_admin.id,
-        pasdispositivo_id=device_creds.id
+        nombre=payload.nombre,
+        device_type=payload.device_type,
+        is_active=payload.is_active,
+        admin_id=payload.admin_id,
+        pasdispositivo_id=pas.id
     )
     db.add(device)
     db.commit()
     db.refresh(device)
     
-    return device
+    return ResponseFormatter.success(device, "Device created successfully")
 
-@router.put("/{device_id}", response_model=DeviceResponse)
-def update_device(
-    device_id: int,
-    device_data: DeviceUpdate,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
+
+@router.get("/")
+def list_devices(
+    current_admin=Depends(require_permission("view_reports")),
+    db: Session = Depends(get_db)
 ):
-    """Update device (admin only)"""
+    """List all devices"""
+    devices = db.query(Device).all()
+    return ResponseFormatter.success(devices, "Devices listed successfully")
+
+
+@router.get("/{device_id}")
+def get_device(
+    device_id: int,
+    current_admin=Depends(require_permission("view_reports")),
+    db: Session = Depends(get_db)
+):
+    """Get device by ID"""
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    
-    if device_data.nombre is not None:
-        device.nombre = device_data.nombre
-    if device_data.is_active is not None:
-        device.is_active = device_data.is_active
-    
-    db.commit()
-    db.refresh(device)
-    return device
-
-@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_device(
-    device_id: int,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
-):
-    """Delete device (admin only)"""
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    
-    db.delete(device)
-    db.commit()
-    return None
+    return ResponseFormatter.success(device, "Device retrieved successfully")

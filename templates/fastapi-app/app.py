@@ -1,89 +1,116 @@
 """
-IoT Fire Prevention Platform - Main Application
-FastAPI backend with 4 authentication types
+Fire Prevention Platform - Main Application
+FastAPI with MongoDB for sensor data
 """
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import time
+from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
+from contextlib import asynccontextmanager
+from api.v1.routers import auth, users, devices, sensors, alerts
+from database.mongo import MongoDBManager, create_indexes
+import logging
 
-from database import engine, Base
-from core.config import redis_manager
-from api.v1.routers import auth, users, devices
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
 
-# Initialize FastAPI app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifecycle management"""
+    # Startup
+    try:
+        logger.info("🚀 Starting application...")
+        MongoDBManager.get_client()
+        create_indexes()
+        logger.info("✅ Application started successfully")
+    except Exception as e:
+        logger.error(f"❌ Startup error: {e}")
+    
+    yield
+    
+    # Shutdown
+    try:
+        logger.info("🔌 Closing connections...")
+        MongoDBManager.close_connection()
+        logger.info("✅ Application stopped")
+    except Exception as e:
+        logger.error(f"❌ Shutdown error: {e}")
+
+
 app = FastAPI(
-    title="IoT Fire Prevention Platform API",
-    description="Production-grade IoT platform with cryptographic device authentication",
-    version="2.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="Fire Prevention System API",
+    description="IoT Platform with cryptographic device authentication",
+    version="2.3.0",
+    lifespan=lifespan
 )
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure properly in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Request timing middleware
-@app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    return response
 
 # Include routers
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(users.router, prefix="/api/v1")
-app.include_router(devices.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1/auth")
+app.include_router(users.router, prefix="/api/v1/users")
+app.include_router(devices.router, prefix="/api/v1/devices")
+app.include_router(sensors.router, prefix="/api/v1")
+app.include_router(alerts.router, prefix="/api/v1/alerts")
 
-# Root endpoint
-@app.get("/")
-async def root():
-    return {
-        "message": "IoT Fire Prevention Platform API",
-        "version": "2.0",
-        "status": "operational",
-        "docs": "/docs"
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT token for users, admins and managers"
+        },
+        "DeviceAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT token for IoT devices (POST /device/login)"
+        }
     }
+    
+    no_auth_endpoints = [
+        "login_user", "login_admin", "login_manager", "login_device",
+        "root", "health_check", "generate_puzzle_for_testing",
+        "init_device_encryption_key"
+    ]
+    
+    device_endpoints = ["/api/v1/device/reading"]
+    
+    for path, path_item in openapi_schema["paths"].items():
+        for operation in path_item.values():
+            if isinstance(operation, dict):
+                operation_id = operation.get("operationId", "")
+                
+                if operation_id in no_auth_endpoints:
+                    continue
+                
+                if path in device_endpoints:
+                    operation["security"] = [{"DeviceAuth": []}]
+                    continue
+                
+                operation["security"] = [{"BearerAuth": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
 
-# Health check
+
+app.openapi = custom_openapi
+
+
+@app.get("/")
+def root():
+    return {"message": "Fire Prevention API v2.3", "status": "operational"}
+
+
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Docker and monitoring"""
-    try:
-        # Test Redis connection
-        redis_manager.connect()
-        redis_status = "healthy"
-    except Exception:
-        redis_status = "unhealthy"
-    
-    return {
-        "status": "healthy",
-        "redis": redis_status,
-        "timestamp": time.time()
-    }
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize connections on startup"""
-    redis_manager.connect()
-    print("✓ FastAPI application started")
-    print("✓ Redis connection initialized")
-    print("✓ Database tables verified")
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    print("✓ FastAPI application shutdown")
+    return {"status": "healthy"}

@@ -1,132 +1,77 @@
 """
-Security Module - JWT, Password Hashing, Session Management
+Security Module - JWT, Password Hashing (Argon2), Session Management
 """
 from datetime import datetime, timedelta
-from typing import Optional, Dict
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from .config import settings, redis_manager
+from typing import Optional, Dict, Any
+import logging
 import uuid
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from fastapi import HTTPException, status
+from core.config import settings
 
-# Password hashing context (bcrypt)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger(__name__)
+
+# ARGON2 - No 72 character limit
+pwd_context = CryptContext(
+    schemes=["argon2"],
+    deprecated="auto",
+    argon2__memory_cost=102400,
+    argon2__time_cost=2,
+    argon2__parallelism=8
+)
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password against bcrypt hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify password against Argon2 hash"""
+    if hashed_password is None:
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.warning(f"Password verification failed: {e}")
+        return False
+
 
 def get_password_hash(password: str) -> str:
-    """Generate bcrypt hash from password"""
+    """Generate Argon2 hash from password"""
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, token_type: str = "user", expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Create JWT access token with JTI for session tracking
-    
-    Args:
-        data: Payload data (must include 'sub' and 'id')
-        token_type: Type of token (user, admin, manager, device)
-        expires_delta: Custom expiration time
-    
-    Returns:
-        Encoded JWT token
-    """
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Create JWT with unique JTI for session tracking"""
     to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     
-    # Generate unique JTI for session tracking
     jti = str(uuid.uuid4())
-    to_encode.update({"jti": jti})
-    
-    # Set expiration
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        # Default expiration based on type
-        if token_type == "device":
-            minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES_DEVICE
-        else:
-            minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        expire = datetime.utcnow() + timedelta(minutes=minutes)
     
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
-        "type": token_type
+        "jti": jti,
+        "iat": datetime.utcnow()
     })
     
-    # Encode token
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
-def decode_access_token(token: str) -> Dict:
-    """
-    Decode and validate JWT token
-    
-    Args:
-        token: JWT token string
-    
-    Returns:
-        Decoded payload
-    
-    Raises:
-        JWTError: If token is invalid or expired
-    """
+
+def decode_token(token: str) -> Dict[str, Any]:
+    """Decode and validate JWT"""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except JWTError:
-        raise
+    except JWTError as e:
+        logger.warning(f"Token decode error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-def store_session(entity_id: int, entity_type: str, jti: str, ttl: int):
-    """
-    Store session in Redis for single-session enforcement
-    
-    Args:
-        entity_id: User/Admin/Manager/Device ID
-        entity_type: Type (user, admin, manager, device)
-        jti: JWT ID from token
-        ttl: Time to live in seconds
-    """
-    key = f"session:{entity_type}:{entity_id}"
-    redis_manager.set_session(key, jti, ttl)
 
-def validate_session(entity_id: int, entity_type: str, jti: str) -> bool:
-    """
-    Validate that session JTI matches stored JTI in Redis
-    
-    Args:
-        entity_id: Entity ID
-        entity_type: Type of entity
-        jti: JTI from token
-    
-    Returns:
-        True if session is valid, False otherwise
-    """
-    key = f"session:{entity_type}:{entity_id}"
-    stored_jti = redis_manager.get_session(key)
-    return stored_jti == jti
-
-def delete_session(entity_id: int, entity_type: str):
-    """
-    Delete session from Redis (logout)
-    
-    Args:
-        entity_id: Entity ID
-        entity_type: Type of entity
-    """
-    key = f"session:{entity_type}:{entity_id}"
-    redis_manager.delete_session(key)
-
-def check_existing_session(entity_id: int, entity_type: str) -> bool:
-    """
-    Check if active session exists for entity
-    
-    Args:
-        entity_id: Entity ID
-        entity_type: Type of entity
-    
-    Returns:
-        True if session exists, False otherwise
-    """
-    key = f"session:{entity_type}:{entity_id}"
-    return redis_manager.get_session(key) is not None
+def extract_jti_from_token(token: str) -> str:
+    """Extract JTI from token"""
+    try:
+        payload = decode_token(token)
+        return payload.get("jti", "")
+    except:
+        return ""

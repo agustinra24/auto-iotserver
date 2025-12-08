@@ -45,12 +45,30 @@ cd iot-platform-installer
 # 2. Hacer ejecutable
 chmod +x install.sh
 
-# 3. Previsualizar instalación (recomendado)
+# 3. Previsualizar instalación (recomendado primero)
 sudo ./install.sh --dry-run
 
-# 4. Ejecutar instalación
+# 4. Ejecutar instalación (muestra menú interactivo)
 sudo ./install.sh
 ```
+
+### Modos de Ejecución
+
+| Comando | Comportamiento |
+|---------|----------------|
+| `sudo ./install.sh` | Muestra menú interactivo con 4 opciones |
+| `sudo ./install.sh --dry-run` | **Salta el menú**, muestra plan de instalación sin ejecutar cambios |
+| `sudo ./install.sh --resume` | Reanuda desde el último checkpoint guardado |
+
+### Menú Interactivo
+
+Cuando ejecutas `sudo ./install.sh` sin flags, verás:
+1. **Start Installation** - Inicia instalación real (modifica el sistema)
+2. **Dry-Run** - Previsualiza pasos sin hacer cambios
+3. **Resume from checkpoint** - Reanuda instalación interrumpida
+4. **Exit** - Salir del instalador
+
+> **💡 TIP**: Si solo quieres ver qué hará el instalador, usa `--dry-run` directamente para saltar el menú.
 
 ### Solicitudes Interactivas
 
@@ -208,9 +226,12 @@ sudo ./install.sh --resume
 ```
 
 El script automáticamente:
+- Salta el menú interactivo
 - Carga configuración guardada
 - Carga secretos generados
 - Reanuda desde la última fase completada
+
+> **Nota**: También puedes seleccionar la opción 3 del menú si ejecutas `sudo ./install.sh` sin flags.
 
 ## 🧪 Probar la Instalación
 

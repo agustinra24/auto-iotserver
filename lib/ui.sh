@@ -10,14 +10,14 @@ show_banner() {
     cat << "EOF"
 ╔═══════════════════════════════════════════════════════════════════╗
 ║                                                                   ║
-║   _____ _______ _____  _       _    _______ ______ ____  _____   ║
-║  |_   _|__   __|  __ \| |     | |  |__   __|  ____/ __ \|  __ \  ║
-║    | |    | |  | |__) | |     | |     | |  | |__ | |  | | |__) | ║
-║    | |    | |  |  ___/| |     | |     | |  |  __|| |  | |  _  /  ║
-║   _| |_   | |  | |    | |____ | |____ | |  | |   | |__| | | \ \  ║
-║  |_____|  |_|  |_|    |______||______||_|  |_|    \____/|_|  \_\ ║
+║               _____ _   _          ____  ______                   ║
+║              |_   _| \ | |   /\   / __ \|  ____|                  ║
+║                | | |  \| |  /  \ | |  | | |__                     ║
+║                | | | . ` | / /\ \| |  | |  __|                    ║
+║               _| |_| |\  |/ ____ \ |__| | |____                   ║
+║              |_____|_| \_/_/    \_\____/|______|                  ║
 ║                                                                   ║
-║              Fire Prevention Platform - Installer                ║
+║              Fire Prevention Platform - Installer                 ║
 ║                                                                   ║
 ╚═══════════════════════════════════════════════════════════════════╝
 EOF
@@ -181,8 +181,7 @@ show_critical_pause() {
 show_dry_run_plan() {
     show_section_header "DRY-RUN: Installation Plan"
     
-    cat << EOF
-${BOLD}The following phases will be executed:${RESET}
+    echo -e "${BOLD}The following phases will be executed:${RESET}
 
 ${CYAN}[Phase 0]${RESET} Preparation
   • Verify system resources
@@ -263,11 +262,10 @@ ${BOLD}Critical Pauses:${RESET}
 ${BOLD}Generated Secrets:${RESET}
   All passwords and keys will be auto-generated and saved to:
   ${SECRETS_FILE}
-
-EOF
+"
 
     read -p "Proceed with actual installation? [y/N]: " proceed
-    [[ "$proceed" == "y" ]] || exit 0
+    if [[ "$proceed" == "y" ]]; then return 0; else return 1; fi
 }
 
 # Show table

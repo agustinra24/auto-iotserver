@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# lib/phases.sh - Installation phase implementations
+# lib/phases.sh - Installation phase implementations (v2.3)
 ################################################################################
 
 ################################################################################
@@ -20,13 +20,13 @@ phase_0_preparation() {
     local install_dir="/home/${NEW_USERNAME}/iot-platform"
     
     if [[ "$DRY_RUN" != true ]]; then
-        # Create base directory (as root, will fix permissions later)
         mkdir -p "$install_dir"
         mkdir -p "$install_dir"/{logs,mysql-data,mysql-init,mongo-data,redis-data,nginx,fastapi-app}
         mkdir -p "$install_dir/nginx/conf.d"
-        mkdir -p "$install_dir/fastapi-app"/{core,models,schemas,api/v1/routers}
+        mkdir -p "$install_dir/nginx/ssl"
+        mkdir -p "$install_dir/logs"/{mysql,mongodb,redis,fastapi,nginx}
+        mkdir -p "$install_dir/fastapi-app"/{core,models,schemas,api/v1/routers,database}
         
-        # Store for later use
         echo "INSTALL_DIR=\"$install_dir\"" >> "$CONFIG_FILE"
     fi
     complete_task "Installation directories created"
@@ -43,104 +43,153 @@ phase_0_preparation() {
 }
 
 ################################################################################
-# PHASE 1: User Management (CRITICAL - REQUIRES VALIDATION)
+# PHASE 1: User Management
 ################################################################################
 phase_1_user_management() {
     CURRENT_PHASE=1
     log_info "Starting Phase 1: User Management"
-    
+
     # Update system first
     show_task "Updating system packages" "running"
     exec_cmd "apt-get update" "Update package lists"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y" "Upgrade packages"
     complete_task "System updated"
-    
+
     # Create new user
     show_task "Creating user: $NEW_USERNAME" "running"
-    if user_exists "$NEW_USERNAME"; then
-        log_warning "User $NEW_USERNAME already exists"
-        complete_task "User already exists: $NEW_USERNAME"
-    else
-        if [[ "$DRY_RUN" != true ]]; then
-            # Create user non-interactively
-            adduser --disabled-password --gecos "" "$NEW_USERNAME"
-            
-            # Set password
-            local temp_password=$(generate_random_string 16)
-            echo "$NEW_USERNAME:$temp_password" | chpasswd
-            
-            # Save temp password
-            echo "TEMP_USER_PASSWORD=\"$temp_password\"" >> "$SECRETS_FILE"
-            
-            log_info "Temporary password set for $NEW_USERNAME: $temp_password"
-            log_warning "Change this password after first login!"
-        fi
-        complete_task "User created: $NEW_USERNAME"
-    fi
     
+    if id "$NEW_USERNAME" &>/dev/null; then
+        log_info "User $NEW_USERNAME already exists"
+    else
+        adduser --disabled-password --gecos "" "$NEW_USERNAME"
+        
+        local temp_password=$(openssl rand -base64 16 | tr -d "=+/")
+        echo "$NEW_USERNAME:$temp_password" | chpasswd
+        
+        mkdir -p "$(dirname "$SECRETS_FILE")"
+        echo "TEMP_USER_PASSWORD=\"$temp_password\"" >> "$SECRETS_FILE"
+        chmod 600 "$SECRETS_FILE"
+        
+        log_info "Temporary password for $NEW_USERNAME: $temp_password"
+        log_warning "Change this password after first login!"
+    fi
+    complete_task "User created: $NEW_USERNAME"
+
     # Add to sudo group
     show_task "Granting sudo privileges" "running"
-    exec_cmd "usermod -aG sudo $NEW_USERNAME" "Add to sudo group"
+    usermod -aG sudo "$NEW_USERNAME"
     complete_task "Sudo privileges granted"
-    
-    # Configure sudo without password (temporary, for installation)
+
+    # Configure sudo without password
     show_task "Configuring sudo" "running"
-    if [[ "$DRY_RUN" != true ]]; then
-        echo "$NEW_USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$NEW_USERNAME"
-        chmod 440 "/etc/sudoers.d/$NEW_USERNAME"
-    fi
+    echo "$NEW_USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$NEW_USERNAME"
+    chmod 440 "/etc/sudoers.d/$NEW_USERNAME"
     complete_task "Sudo configured"
+
+    # Setup home directory
+    show_task "Setting up home directory" "running"
+    mkdir -p "/home/$NEW_USERNAME"
+    chown "$NEW_USERNAME:$NEW_USERNAME" "/home/$NEW_USERNAME"
+    chmod 755 "/home/$NEW_USERNAME"
+    complete_task "Home directory ready"
+
+    # Copy installer to new user's home
+    show_task "Copying installer to new user home" "running"
+    local new_installer_dir="/home/$NEW_USERNAME/iot-platform-installer"
+    if [[ "$SCRIPT_DIR" != "$new_installer_dir" ]]; then
+        cp -r "$SCRIPT_DIR" "$new_installer_dir"
+        chown -R "$NEW_USERNAME:$NEW_USERNAME" "$new_installer_dir"
+        chmod +x "$new_installer_dir/install.sh"
+        chmod +x "$new_installer_dir/lib/"*.sh
+    fi
+    complete_task "Installer copied"
+
+    # Create config in new location
+    show_task "Creating config for new user" "running"
+    local new_config="/home/$NEW_USERNAME/iot-platform-installer/.config.env"
+    local new_secrets="/home/$NEW_USERNAME/.iot-platform/.secrets"
     
-    # CRITICAL VALIDATION PAUSE
-    if [[ "$DRY_RUN" != true ]]; then
-        show_critical_pause "USER VALIDATION" \
-            "" \
-            "Phase 1 has created user: $NEW_USERNAME" \
-            "Temporary password: $temp_password" \
-            "" \
-            "BEFORE continuing, you MUST validate:" \
-            "" \
-            "  1. Open a NEW terminal window" \
-            "  2. SSH to this server: ssh $NEW_USERNAME@$VPS_IP" \
-            "  3. Test sudo access: sudo whoami" \
-            "  4. Expected output: root" \
-            "" \
-            "If user login works and sudo returns 'root', validation passed."
+    mkdir -p "/home/$NEW_USERNAME/.iot-platform"
+    chown -R "$NEW_USERNAME:$NEW_USERNAME" "/home/$NEW_USERNAME/.iot-platform"
+    chmod 700 "/home/$NEW_USERNAME/.iot-platform"
+    
+    if [[ -f "$SECRETS_FILE" ]]; then
+        cp "$SECRETS_FILE" "$new_secrets"
+        chown "$NEW_USERNAME:$NEW_USERNAME" "$new_secrets"
+        chmod 600 "$new_secrets"
     fi
     
-    # Delete debian user if exists
-    if user_exists "debian"; then
-        show_task "Removing default 'debian' user" "running"
-        
-        if [[ "$DRY_RUN" != true ]]; then
-            # Kill any processes owned by debian
-            pkill -u debian || true
-            
-            # Remove user and home directory
-            deluser --remove-home debian 2>/dev/null || true
-            
-            # Remove from sudoers if exists
-            rm -f /etc/sudoers.d/debian
-        fi
-        complete_task "Default 'debian' user removed"
-    fi
+    cat > "$new_config" << NEWCONFEOF
+# IoT Platform Installation Configuration
+# Generated: $(date)
+
+VPS_IP="$VPS_IP"
+NEW_USERNAME="$NEW_USERNAME"
+SSH_PORT="$SSH_PORT"
+DOMAIN="$DOMAIN"
+DB_NAME="fire_preventionf"
+DOCKER_SUBNET="$DOCKER_SUBNET"
+REDIS_MEMORY="$REDIS_MEMORY"
+TIMEZONE="$TIMEZONE"
+
+# Paths
+INSTALL_DIR="/home/${NEW_USERNAME}/iot-platform"
+SECRETS_FILE="$new_secrets"
+NEWCONFEOF
     
+    chown "$NEW_USERNAME:$NEW_USERNAME" "$new_config"
+    chmod 600 "$new_config"
+    complete_task "Config created for new user"
+
+    # Save checkpoint
+    show_task "Saving checkpoint" "running"
+    local new_state_file="/home/$NEW_USERNAME/iot-platform-installer/.install-state"
+    cat > "$new_state_file" << STATEEOF
+LAST_COMPLETED_PHASE=1
+TIMESTAMP=$(date +%s)
+DATE="$(date)"
+STATEEOF
+    chown "$NEW_USERNAME:$NEW_USERNAME" "$new_state_file"
+    complete_task "Checkpoint saved"
+
     # Configure hostname
     show_task "Configuring hostname" "running"
-    if [[ "$DRY_RUN" != true ]]; then
-        echo "iot-platform" > /etc/hostname
-        hostname iot-platform
-        
-        # Update /etc/hosts
+    echo "iot-platform" > /etc/hostname
+    hostname iot-platform
+    if ! grep -q "iot-platform" /etc/hosts; then
         sed -i "s/127.0.1.1.*/127.0.1.1\tiot-platform/" /etc/hosts
     fi
     complete_task "Hostname configured"
-    
+
     # Set timezone
     show_task "Setting timezone: $TIMEZONE" "running"
-    exec_cmd "timedatectl set-timezone $TIMEZONE" "Set timezone"
-    complete_task "Timezone set to $TIMEZONE"
-    
+    timedatectl set-timezone "$TIMEZONE" 2>/dev/null || true
+    complete_task "Timezone set"
+
+    # Handle debian user deletion
+    if id "debian" &>/dev/null; then
+        log_success "Phase 1 complete"
+        echo ""
+        echo "========================================================"
+        echo "  IMPORTANT: You must reconnect as the new user!"
+        echo "========================================================"
+        echo ""
+        echo "  1. Your SSH session will be closed"
+        echo "  2. Wait 5 seconds"
+        echo "  3. Reconnect: ssh $NEW_USERNAME@$VPS_IP"
+        echo "  4. Then run: cd ~/iot-platform-installer && sudo ./install.sh --resume"
+        echo ""
+        echo "========================================================"
+        echo ""
+        read -p "Press ENTER to continue (your session will close)..."
+        
+        pkill -u debian 2>/dev/null || true
+        sleep 2
+        deluser --remove-home debian 2>/dev/null || true
+        
+        exit 0
+    fi
+
     log_success "Phase 1 complete"
 }
 
@@ -151,27 +200,22 @@ phase_2_dependencies() {
     CURRENT_PHASE=2
     log_info "Starting Phase 2: Core Dependencies"
     
-    # Build tools
     show_task "Installing build tools" "running"
-    exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential git curl wget" "Install build tools"
+    exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential git curl wget jq" "Install build tools"
     complete_task "Build tools installed"
     
-    # Python and dependencies
     show_task "Installing Python and dependencies" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-dev python3-venv" "Install Python"
     complete_task "Python installed"
     
-    # Network tools
     show_task "Installing network tools" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y net-tools netcat-openbsd iproute2" "Install network tools"
     complete_task "Network tools installed"
     
-    # Monitoring utilities
     show_task "Installing monitoring utilities" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y htop iotop sysstat" "Install monitoring tools"
     complete_task "Monitoring utilities installed"
     
-    # Security tools
     show_task "Installing security tools" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y ufw nftables" "Install firewall tools"
     complete_task "Security tools installed"
@@ -186,7 +230,6 @@ phase_3_firewall() {
     CURRENT_PHASE=3
     log_info "Starting Phase 3: Firewall Configuration"
     
-    # Disable UFW if active
     show_task "Disabling UFW" "running"
     if systemctl is-active --quiet ufw; then
         exec_cmd "systemctl stop ufw" "Stop UFW"
@@ -194,15 +237,12 @@ phase_3_firewall() {
     fi
     complete_task "UFW disabled"
     
-    # Install nftables
     show_task "Installing nftables" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y nftables" "Install nftables"
     complete_task "nftables installed"
     
-    # Copy template
     show_task "Configuring nftables rules" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        # Create nftables config from template
         sed -e "s/{{SSH_PORT}}/$SSH_PORT/g" \
             "$SCRIPT_DIR/templates/nftables.conf.tpl" > /tmp/nftables.conf
         
@@ -211,24 +251,21 @@ phase_3_firewall() {
     fi
     complete_task "nftables rules configured"
     
-    # Enable and start
     show_task "Enabling nftables" "running"
     exec_cmd "systemctl enable nftables" "Enable nftables service"
     exec_cmd "systemctl restart nftables" "Start nftables"
     complete_task "nftables enabled and started"
     
-    # Create emergency script
     show_task "Creating emergency firewall disable script" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        cat > /usr/local/bin/emergency-disable-firewall.sh << 'EOF'
+        cat > /usr/local/bin/emergency-disable-firewall.sh << 'FWEOF'
 #!/bin/bash
-# Emergency script to disable firewall
 echo "EMERGENCY: Disabling firewall..."
 nft flush ruleset
 systemctl stop nftables
 systemctl disable nftables
 echo "Firewall disabled. Fix your rules and re-enable."
-EOF
+FWEOF
         chmod +x /usr/local/bin/emergency-disable-firewall.sh
     fi
     complete_task "Emergency script created"
@@ -243,19 +280,16 @@ phase_4_fail2ban() {
     CURRENT_PHASE=4
     log_info "Starting Phase 4: Fail2Ban"
     
-    # Install Fail2Ban
     show_task "Installing Fail2Ban" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban" "Install Fail2Ban"
     complete_task "Fail2Ban installed"
     
-    # Create nftables action
     show_task "Configuring Fail2Ban nftables action" "running"
     if [[ "$DRY_RUN" != true ]]; then
         cp "$SCRIPT_DIR/templates/fail2ban-action.conf.tpl" /etc/fail2ban/action.d/nftables-custom.conf
     fi
     complete_task "nftables action configured"
     
-    # Create jail configuration
     show_task "Configuring Fail2Ban jails" "running"
     if [[ "$DRY_RUN" != true ]]; then
         sed -e "s/{{SSH_PORT}}/$SSH_PORT/g" \
@@ -263,7 +297,6 @@ phase_4_fail2ban() {
     fi
     complete_task "Jails configured"
     
-    # Enable and start
     show_task "Starting Fail2Ban" "running"
     exec_cmd "systemctl enable fail2ban" "Enable Fail2Ban"
     exec_cmd "systemctl restart fail2ban" "Start Fail2Ban"
@@ -273,26 +306,22 @@ phase_4_fail2ban() {
 }
 
 ################################################################################
-# PHASE 5: SSH Hardening (CRITICAL - REQUIRES VALIDATION)
+# PHASE 5: SSH Hardening
 ################################################################################
 phase_5_ssh_hardening() {
     CURRENT_PHASE=5
     log_info "Starting Phase 5: SSH Hardening"
     
-    # Backup SSH config
     show_task "Backing up SSH configuration" "running"
     backup_file "/etc/ssh/sshd_config"
     complete_task "SSH config backed up"
     
-    # Modify SSH config
     show_task "Configuring SSH settings" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        # Add new port (keep 22 temporarily)
         if ! grep -q "^Port $SSH_PORT" /etc/ssh/sshd_config; then
             echo "Port $SSH_PORT" >> /etc/ssh/sshd_config
         fi
         
-        # Security settings
         sed -i 's/#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
         sed -i 's/#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
         sed -i 's/#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
@@ -301,20 +330,16 @@ phase_5_ssh_hardening() {
     fi
     complete_task "SSH configured"
     
-    # Add new port to firewall
     show_task "Adding SSH port to firewall" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        # Already configured in nftables.conf template
         nft -f /etc/nftables.conf
     fi
     complete_task "Firewall updated"
     
-    # Restart SSH
     show_task "Restarting SSH service" "running"
     exec_cmd "systemctl restart sshd" "Restart SSH"
     complete_task "SSH restarted"
     
-    # CRITICAL VALIDATION PAUSE
     if [[ "$DRY_RUN" != true ]]; then
         show_critical_pause "SSH PORT VALIDATION" \
             "" \
@@ -333,7 +358,6 @@ phase_5_ssh_hardening() {
             "DO NOT CONTINUE if you cannot connect on port $SSH_PORT!"
     fi
     
-    # Close port 22
     show_task "Closing default SSH port 22" "running"
     if [[ "$DRY_RUN" != true ]]; then
         sed -i '/^Port 22$/d' /etc/ssh/sshd_config
@@ -352,17 +376,14 @@ phase_6_docker() {
     CURRENT_PHASE=6
     log_info "Starting Phase 6: Docker Installation"
     
-    # Remove old versions
     show_task "Removing old Docker versions" "running"
     exec_cmd "apt-get remove -y docker docker-engine docker.io containerd runc || true" "Remove old Docker"
     complete_task "Old Docker versions removed"
     
-    # Install dependencies
     show_task "Installing Docker dependencies" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates gnupg lsb-release" "Install dependencies"
     complete_task "Dependencies installed"
     
-    # Add Docker GPG key
     show_task "Adding Docker GPG key" "running"
     if [[ "$DRY_RUN" != true ]]; then
         mkdir -p /etc/apt/keyrings
@@ -371,7 +392,6 @@ phase_6_docker() {
     fi
     complete_task "GPG key added"
     
-    # Add Docker repository
     show_task "Adding Docker repository" "running"
     if [[ "$DRY_RUN" != true ]]; then
         echo \
@@ -381,21 +401,18 @@ phase_6_docker() {
     fi
     complete_task "Repository added"
     
-    # Install Docker
     show_task "Installing Docker Engine" "running"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" "Install Docker"
     complete_task "Docker installed"
     
-    # Add user to docker group
     show_task "Adding $NEW_USERNAME to docker group" "running"
     exec_cmd "usermod -aG docker $NEW_USERNAME" "Add to docker group"
     complete_task "User added to docker group"
     
-    # Configure Docker daemon
     show_task "Configuring Docker daemon" "running"
     if [[ "$DRY_RUN" != true ]]; then
         mkdir -p /etc/docker
-        cat > /etc/docker/daemon.json << EOF
+        cat > /etc/docker/daemon.json << DOCKEREOF
 {
   "log-driver": "json-file",
   "log-opts": {
@@ -404,17 +421,15 @@ phase_6_docker() {
   },
   "storage-driver": "overlay2"
 }
-EOF
+DOCKEREOF
     fi
     complete_task "Docker daemon configured"
     
-    # Start Docker
     show_task "Starting Docker service" "running"
     exec_cmd "systemctl enable docker" "Enable Docker"
     exec_cmd "systemctl start docker" "Start Docker"
     complete_task "Docker started"
     
-    # Verify
     show_task "Verifying Docker installation" "running"
     if [[ "$DRY_RUN" != true ]]; then
         docker --version >> "$LOG_FILE"
@@ -434,8 +449,15 @@ phase_7_project_structure() {
     
     source "$CONFIG_FILE"
     local install_dir="$INSTALL_DIR"
+    # Create session log directory with proper permissions
+    mkdir -p "$install_dir/logs/fastapi/sessions"
+    chmod -R 777 "$install_dir/logs/fastapi"
+
     
-    # Create .env file
+    mkdir -p "$install_dir"/{logs,mysql-data,mysql-init,mongo-data,redis-data,nginx/conf.d,nginx/ssl}
+    mkdir -p "$install_dir/logs"/{mysql,mongodb,redis,fastapi,nginx}
+    mkdir -p "$install_dir/fastapi-app"/{core,models,schemas,api/v1/routers,database}
+    
     show_task "Creating environment file" "running"
     if [[ "$DRY_RUN" != true ]]; then
         source "$SECRETS_FILE"
@@ -445,17 +467,15 @@ phase_7_project_structure() {
             -e "s/{{REDIS_PASSWORD}}/$REDIS_PASSWORD/g" \
             -e "s/{{MONGO_PASSWORD}}/$MONGO_PASSWORD/g" \
             -e "s/{{SECRET_KEY}}/$SECRET_KEY/g" \
-            -e "s/{{DB_NAME}}/$DB_NAME/g" \
             "$SCRIPT_DIR/templates/env.tpl" > "$install_dir/.env"
         
         chmod 600 "$install_dir/.env"
     fi
     complete_task "Environment file created"
     
-    # Create .gitignore
     show_task "Creating .gitignore" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        cat > "$install_dir/.gitignore" << EOF
+        cat > "$install_dir/.gitignore" << GIEOF
 .env
 .env.local
 *.log
@@ -466,11 +486,10 @@ redis-data/
 __pycache__/
 *.pyc
 .pytest_cache/
-EOF
+GIEOF
     fi
     complete_task ".gitignore created"
     
-    # Fix permissions
     show_task "Setting directory permissions" "running"
     if [[ "$DRY_RUN" != true ]]; then
         chown -R "$NEW_USERNAME:$NEW_USERNAME" "$install_dir"
@@ -492,33 +511,24 @@ phase_8_fastapi_app() {
     local install_dir="$INSTALL_DIR"
     local app_dir="$install_dir/fastapi-app"
     
-    # Copy all FastAPI files from templates
     show_task "Copying FastAPI application files" "running"
     if [[ "$DRY_RUN" != true ]]; then
         cp -r "$SCRIPT_DIR/templates/fastapi-app/"* "$app_dir/"
     fi
     complete_task "Application files copied"
     
-    # Create __init__.py files
     show_task "Creating Python package structure" "running"
     if [[ "$DRY_RUN" != true ]]; then
         touch "$app_dir/__init__.py"
         touch "$app_dir/core/__init__.py"
         touch "$app_dir/models/__init__.py"
         touch "$app_dir/schemas/__init__.py"
+        touch "$app_dir/database/__init__.py"
         touch "$app_dir/api/__init__.py"
         touch "$app_dir/api/v1/__init__.py"
         touch "$app_dir/api/v1/routers/__init__.py"
     fi
     complete_task "Package structure created"
-    
-    # Build Docker image
-    show_task "Building FastAPI Docker image" "running"
-    if [[ "$DRY_RUN" != true ]]; then
-        cd "$install_dir"
-        docker compose build fastapi >> "$LOG_FILE" 2>&1
-    fi
-    complete_task "Docker image built"
     
     log_success "Phase 8 complete"
 }
@@ -534,16 +544,13 @@ phase_9_mysql_init() {
     source "$SECRETS_FILE"
     local install_dir="$INSTALL_DIR"
     
-    # Generate password hashes
-    show_task "Generating test password hashes" "running"
+    show_task "Generating Argon2 password hashes" "running"
     generate_test_password_hashes
     complete_task "Password hashes generated"
     
-    # Create init.sql from template
     show_task "Creating MySQL initialization script" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        sed -e "s/{{DB_NAME}}/$DB_NAME/g" \
-            -e "s|{{ADMIN_PASSWORD_HASH}}|$ADMIN_PASSWORD_HASH|g" \
+        sed -e "s|{{ADMIN_PASSWORD_HASH}}|$ADMIN_PASSWORD_HASH|g" \
             -e "s|{{USER_PASSWORD_HASH}}|$USER_PASSWORD_HASH|g" \
             -e "s|{{MANAGER_PASSWORD_HASH}}|$MANAGER_PASSWORD_HASH|g" \
             "$SCRIPT_DIR/templates/mysql-init.sql.tpl" > "$install_dir/mysql-init/init.sql"
@@ -563,14 +570,12 @@ phase_10_nginx() {
     source "$CONFIG_FILE"
     local install_dir="$INSTALL_DIR"
     
-    # Copy Nginx main config
     show_task "Copying Nginx main configuration" "running"
     if [[ "$DRY_RUN" != true ]]; then
         cp "$SCRIPT_DIR/templates/nginx.conf.tpl" "$install_dir/nginx/nginx.conf"
     fi
     complete_task "Main config copied"
     
-    # Copy site configuration
     show_task "Copying Nginx site configuration" "running"
     if [[ "$DRY_RUN" != true ]]; then
         cp "$SCRIPT_DIR/templates/nginx-site.conf.tpl" "$install_dir/nginx/conf.d/iot-api.conf"
@@ -590,7 +595,6 @@ phase_11_deployment() {
     source "$CONFIG_FILE"
     local install_dir="$INSTALL_DIR"
     
-    # Copy docker-compose.yml
     show_task "Creating docker-compose.yml" "running"
     if [[ "$DRY_RUN" != true ]]; then
         sed -e "s|{{DOCKER_SUBNET}}|$DOCKER_SUBNET|g" \
@@ -598,7 +602,6 @@ phase_11_deployment() {
     fi
     complete_task "docker-compose.yml created"
     
-    # Start services
     show_task "Starting Docker services" "running"
     if [[ "$DRY_RUN" != true ]]; then
         cd "$install_dir"
@@ -606,7 +609,6 @@ phase_11_deployment() {
     fi
     complete_task "Services started"
     
-    # Wait for health checks
     show_task "Waiting for services to be healthy" "running"
     if [[ "$DRY_RUN" != true ]]; then
         log_info "This may take 60-90 seconds..."
@@ -615,7 +617,7 @@ phase_11_deployment() {
         local max_wait=120
         local elapsed=0
         while [[ $elapsed -lt $max_wait ]]; do
-            local healthy=$(docker compose ps --format json | jq -r '.Health' | grep -c "healthy" || echo 0)
+            local healthy=$(docker compose ps --format json 2>/dev/null | jq -r '.Health' 2>/dev/null | grep -c "healthy" || echo 0)
             if [[ $healthy -ge 3 ]]; then
                 break
             fi
@@ -637,7 +639,6 @@ phase_12_testing() {
     
     source "$CONFIG_FILE"
     
-    # Test health endpoint
     show_task "Testing health endpoint" "running"
     if [[ "$DRY_RUN" != true ]]; then
         local health_response=$(curl -s http://localhost/health)
@@ -650,23 +651,30 @@ phase_12_testing() {
         complete_task "Health endpoint (dry-run)"
     fi
     
-    # Test authentication endpoints
-    show_task "Testing authentication endpoints" "running"
+    show_task "Testing admin authentication" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        # Test admin login
         local admin_response=$(curl -s -X POST http://localhost/api/v1/auth/login/admin \
             -H "Content-Type: application/json" \
-            -d '{"email":"admin@iot-platform.com","password":"admin123"}')
+            -d '{"email":"master@fire.com","password":"password123"}')
         
         if echo "$admin_response" | grep -q "access_token"; then
             log_success "Admin authentication works"
         else
             log_warning "Admin authentication may have issues"
+            log_info "Response: $admin_response"
         fi
     fi
     complete_task "Authentication tested"
     
-    # Verify database isolation
+    show_task "Testing MongoDB sensor endpoint" "running"
+    if [[ "$DRY_RUN" != true ]]; then
+        # First get a device token
+        local device_token=""
+        # Note: Device auth requires puzzle, so we skip automated testing
+        log_info "Device authentication requires puzzle - manual testing needed"
+    fi
+    complete_task "MongoDB endpoints ready for testing"
+    
     show_task "Verifying database isolation" "running"
     if [[ "$DRY_RUN" != true ]]; then
         ! nc -zv localhost 3306 2>&1 | grep -q "succeeded" && \
@@ -681,7 +689,6 @@ phase_12_testing() {
     fi
     complete_task "Database isolation verified"
     
-    # Show container status
     show_task "Checking container status" "running"
     if [[ "$DRY_RUN" != true ]]; then
         cd "$INSTALL_DIR"

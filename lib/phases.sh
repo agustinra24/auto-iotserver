@@ -753,6 +753,14 @@ phase_12_testing() {
         
         if echo "$admin_response" | grep -q "access_token"; then
             log_success "Autenticación de administrador funciona"
+            
+            # Extraer token y hacer logout <<<
+            local admin_token=$(echo "$admin_response" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+            if [[ -n "$admin_token" ]]; then
+                curl -s -X POST http://localhost/api/v1/auth/logout \
+                    -H "Authorization: Bearer $admin_token" > /dev/null 2>&1
+                log_info "Sesión de prueba de admin cerrada correctamente"
+            fi
         else
             log_warning "La autenticación de administrador puede tener problemas"
             log_info "Respuesta: $admin_response"
@@ -760,11 +768,52 @@ phase_12_testing() {
     fi
     complete_task "Autenticación probada"
     
+    # Probar login de usuario y cerrar sesión <<<
+    show_task "Probando autenticación de usuario" "running"
+    if [[ "$DRY_RUN" != true ]]; then
+        local user_response=$(curl -s -X POST http://localhost/api/v1/auth/login/user \
+            -H "Content-Type: application/json" \
+            -d '{"email":"user@fire.com","password":"password123"}')
+        
+        if echo "$user_response" | grep -q "access_token"; then
+            log_success "Autenticación de usuario funciona"
+            
+            local user_token=$(echo "$user_response" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+            if [[ -n "$user_token" ]]; then
+                curl -s -X POST http://localhost/api/v1/auth/logout \
+                    -H "Authorization: Bearer $user_token" > /dev/null 2>&1
+                log_info "Sesión de prueba de usuario cerrada correctamente"
+            fi
+        else
+            log_warning "La autenticación de usuario puede tener problemas"
+        fi
+    fi
+    complete_task "Autenticación de usuario probada"
+    
+    # Probar login de gerente y cerrar sesión <<<
+    show_task "Probando autenticación de gerente" "running"
+    if [[ "$DRY_RUN" != true ]]; then
+        local manager_response=$(curl -s -X POST http://localhost/api/v1/auth/login/manager \
+            -H "Content-Type: application/json" \
+            -d '{"email":"gerente@fire.com","password":"password123"}')
+        
+        if echo "$manager_response" | grep -q "access_token"; then
+            log_success "Autenticación de gerente funciona"
+            
+            local manager_token=$(echo "$manager_response" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+            if [[ -n "$manager_token" ]]; then
+                curl -s -X POST http://localhost/api/v1/auth/logout \
+                    -H "Authorization: Bearer $manager_token" > /dev/null 2>&1
+                log_info "Sesión de prueba de gerente cerrada correctamente"
+            fi
+        else
+            log_warning "La autenticación de gerente puede tener problemas"
+        fi
+    fi
+    complete_task "Autenticación de gerente probada"
+    
     show_task "Probando endpoint de sensores MongoDB" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        # Primero obtener un token de dispositivo
-        local device_token=""
-        # Nota: La autenticación de dispositivo requiere puzzle, así que omitimos las pruebas automatizadas
         log_info "La autenticación de dispositivo requiere puzzle - se necesita prueba manual"
     fi
     complete_task "Endpoints de MongoDB listos para pruebas"
@@ -789,6 +838,20 @@ phase_12_testing() {
         docker compose ps >> "$LOG_FILE"
     fi
     complete_task "Contenedores verificados"
+    
+    # Limpiar cualquier sesión residual de pruebas <<<
+    show_task "Limpiando sesiones de prueba" "running"
+    if [[ "$DRY_RUN" != true ]]; then
+        source "$SECRETS_FILE" 2>/dev/null || source "$INSTALL_DIR/.env" 2>/dev/null
+        
+        # Limpiar solo las claves de sesión específicas, NO FLUSHALL
+        docker exec iot-redis redis-cli -a "$REDIS_PASSWORD" --no-auth-warning \
+            DEL "session:admin:1" "session:user:1" "session:manager:1" "session:device:1" \
+            > /dev/null 2>&1 || true
+        
+        log_info "Sesiones de prueba limpiadas"
+    fi
+    complete_task "Sesiones de prueba limpiadas"
     
     log_success "Fase 12 completada"
 }

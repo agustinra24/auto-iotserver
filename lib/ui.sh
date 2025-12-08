@@ -1,11 +1,11 @@
 #!/bin/bash
 ################################################################################
-# lib/ui.sh - Terminal UI and display functions
+# lib/ui.sh - Funciones de UI y visualización en terminal
 ################################################################################
 
-# Show ASCII banner
+# Mostrar banner ASCII
 show_banner() {
-    local title="${1:-IoT Platform}"
+    local title="${1:-Plataforma IoT}"
     
     cat << "EOF"
 ╔═══════════════════════════════════════════════════════════════════╗
@@ -49,13 +49,13 @@ show_phase_header() {
     clear
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${GREEN}║${RESET}  Phase $phase_num/$total_phases: $friendly_name"
-    echo -e "${GREEN}║${RESET}  Progress: $(show_progress_bar $progress)"
+    echo -e "${GREEN}║${RESET}  Fase $phase_num/$total_phases: $friendly_name"
+    echo -e "${GREEN}║${RESET}  Progreso: $(show_progress_bar $progress)"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
 }
 
-# Show progress bar
+# Mostrar barra de progreso
 show_progress_bar() {
     local percent=$1
     local width=50
@@ -68,22 +68,22 @@ show_progress_bar() {
     echo -n "] ${percent}%"
 }
 
-# Show phase complete
+# Mostrar fase completada
 show_phase_complete() {
     local phase_num=$1
     
     echo ""
-    echo -e "${GREEN}✓ Phase $phase_num completed successfully${RESET}"
+    echo -e "${GREEN}Fase $phase_num completada exitosamente${RESET}"
     echo ""
     
-    # Small delay for user to see completion
+    # Pequeña pausa para que el usuario vea la finalización
     sleep 1
 }
 
-# Show spinner
+# Mostrar spinner
 show_spinner() {
     local pid=$1
-    local message="${2:-Processing...}"
+    local message="${2:-Procesando...}"
     local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local i=0
     
@@ -93,34 +93,34 @@ show_spinner() {
         sleep 0.1
     done
     
-    printf "\r${GREEN}✓${RESET} $message\n"
+    printf "\r${GREEN}[OK]${RESET} $message\n"
 }
 
-# Show task with status
+# Mostrar tarea con estado
 show_task() {
     local task="$1"
     local status="${2:-running}"
     
     case $status in
         running)
-            echo -n -e "  ${CYAN}⟳${RESET} $task..."
+            echo -n -e "  ${CYAN}[...]${RESET} $task..."
             ;;
         success)
-            echo -e "\r  ${GREEN}✓${RESET} $task"
+            echo -e "\r  ${GREEN}[OK]${RESET} $task"
             ;;
         error)
-            echo -e "\r  ${RED}✗${RESET} $task"
+            echo -e "\r  ${RED}[ERROR]${RESET} $task"
             ;;
         skip)
-            echo -e "  ${YELLOW}○${RESET} $task (skipped)"
+            echo -e "  ${YELLOW}[SKIP]${RESET} $task (omitido)"
             ;;
     esac
 }
 
-# Complete current task
+# Completar tarea actual
 complete_task() {
     local task="$1"
-    echo -e "\r  ${GREEN}✓${RESET} $task    "
+    echo -e "\r  ${GREEN}[OK]${RESET} $task    "
 }
 
 # Show info box
@@ -145,7 +145,7 @@ show_warning_box() {
     local lines=("$@")
     
     echo ""
-    echo -e "${YELLOW}┌─ ⚠️  $title ─────────────────────────────────────┐${RESET}"
+    echo -e "${YELLOW}┌─ [ADVERTENCIA] $title ─────────────────────────────────────┐${RESET}"
     for line in "${lines[@]}"; do
         echo -e "${YELLOW}│${RESET} $line"
     done
@@ -153,7 +153,7 @@ show_warning_box() {
     echo ""
 }
 
-# Show critical pause box
+# Mostrar caja de pausa crítica
 show_critical_pause() {
     local phase_name="$1"
     shift
@@ -161,7 +161,7 @@ show_critical_pause() {
     
     echo ""
     echo -e "${RED}╔═══════════════════════════════════════════════════════════════════╗${RESET}"
-    echo -e "${RED}║${RESET}  ${BOLD}⚠️  CRITICAL VALIDATION REQUIRED - $phase_name${RESET}"
+    echo -e "${RED}║${RESET}  ${BOLD}VALIDACION CRITICA REQUERIDA - $phase_name${RESET}"
     echo -e "${RED}╠═══════════════════════════════════════════════════════════════════╣${RESET}"
     
     for instruction in "${instructions[@]}"; do
@@ -169,106 +169,106 @@ show_critical_pause() {
     done
     
     echo -e "${RED}╠═══════════════════════════════════════════════════════════════════╣${RESET}"
-    echo -e "${RED}║${RESET}  ${YELLOW}If ALL tests pass: Press ENTER to continue${RESET}"
-    echo -e "${RED}║${RESET}  ${YELLOW}If ANY test fails: Press Ctrl+C to abort${RESET}"
+    echo -e "${RED}║${RESET}  ${YELLOW}Si TODAS las pruebas pasan: Presiona ENTER para continuar${RESET}"
+    echo -e "${RED}║${RESET}  ${YELLOW}Si ALGUNA prueba falla: Presiona Ctrl+C para abortar${RESET}"
     echo -e "${RED}╚═══════════════════════════════════════════════════════════════════╝${RESET}"
     echo ""
     
-    read -p "Press ENTER when validated: "
+    read -p "Presiona ENTER cuando hayas validado: "
 }
 
-# Show dry-run plan
+# Mostrar plan de dry-run
 show_dry_run_plan() {
-    show_section_header "DRY-RUN: Installation Plan"
+    show_section_header "DRY-RUN: Plan de Instalación"
     
-    echo -e "${BOLD}The following phases will be executed:${RESET}
+    echo -e "${BOLD}Las siguientes fases serán ejecutadas:${RESET}
 
-${CYAN}[Phase 0]${RESET} Preparation
-  • Verify system resources
-  • Create installation directory
-  • Setup logging
+${CYAN}[Fase 0]${RESET} Preparación
+  • Verificar recursos del sistema
+  • Crear directorio de instalación
+  • Configurar logging
 
-${CYAN}[Phase 1]${RESET} User Management ${RED}(REQUIRES VALIDATION)${RESET}
-  • Create new user: $NEW_USERNAME
-  • Grant sudo privileges
-  • ${YELLOW}⚠️  PAUSE: Validate in second terminal${RESET}
-  • Remove debian user
+${CYAN}[Fase 1]${RESET} Gestión de Usuarios ${RED}(REQUIERE VALIDACIÓN)${RESET}
+  • Crear nuevo usuario: $NEW_USERNAME
+  • Otorgar privilegios sudo
+  • ${YELLOW}PAUSA: Validar en segunda terminal${RESET}
+  • Eliminar usuario debian
 
-${CYAN}[Phase 2]${RESET} Core Dependencies
-  • Update system packages
-  • Install build tools, Python, network tools
-  • Install monitoring utilities
+${CYAN}[Fase 2]${RESET} Dependencias Base
+  • Actualizar paquetes del sistema
+  • Instalar herramientas de compilación, Python, herramientas de red
+  • Instalar utilidades de monitoreo
 
-${CYAN}[Phase 3]${RESET} Firewall (nftables)
-  • Configure nftables rules
-  • Create dynamic IP sets
-  • Setup DROP policy with allowed ports
+${CYAN}[Fase 3]${RESET} Firewall (nftables)
+  • Configurar reglas de nftables
+  • Crear conjuntos de IP dinámicos
+  • Configurar política DROP con puertos permitidos
 
-${CYAN}[Phase 4]${RESET} Fail2Ban
-  • Install Fail2Ban
-  • Configure SSH, Nginx jails
-  • Integrate with nftables
+${CYAN}[Fase 4]${RESET} Fail2Ban
+  • Instalar Fail2Ban
+  • Configurar jails para SSH, Nginx
+  • Integrar con nftables
 
-${CYAN}[Phase 5]${RESET} SSH Hardening ${RED}(REQUIRES VALIDATION)${RESET}
-  • Change SSH port: 22 → $SSH_PORT
-  • ${YELLOW}⚠️  PAUSE: Test new port in second terminal${RESET}
-  • Disable root login
-  • Close port 22
+${CYAN}[Fase 5]${RESET} Hardening SSH ${RED}(REQUIERE VALIDACIÓN)${RESET}
+  • Cambiar puerto SSH: 22 -> $SSH_PORT
+  • ${YELLOW}PAUSA: Probar nuevo puerto en segunda terminal${RESET}
+  • Deshabilitar login de root
+  • Cerrar puerto 22
 
-${CYAN}[Phase 6]${RESET} Docker Installation
-  • Add Docker repository
-  • Install Docker + Docker Compose
-  • Configure daemon
-  • Add user to docker group
+${CYAN}[Fase 6]${RESET} Instalación de Docker
+  • Agregar repositorio de Docker
+  • Instalar Docker + Docker Compose
+  • Configurar daemon
+  • Agregar usuario al grupo docker
 
-${CYAN}[Phase 7]${RESET} Project Structure
-  • Create ~/iot-platform directory
-  • Copy templates
-  • Generate .env file
+${CYAN}[Fase 7]${RESET} Estructura del Proyecto
+  • Crear directorio ~/iot-platform
+  • Copiar templates
+  • Generar archivo .env
 
-${CYAN}[Phase 8]${RESET} FastAPI Application
-  • Create application files (25+ files)
-  • Copy models, schemas, routers
-  • Setup cryptographic device authentication
-  • Build Docker image
+${CYAN}[Fase 8]${RESET} Aplicación FastAPI
+  • Crear archivos de aplicación (25+ archivos)
+  • Copiar modelos, schemas, routers
+  • Configurar autenticación criptográfica de dispositivos
+  • Construir imagen Docker
 
-${CYAN}[Phase 9]${RESET} MySQL Initialization
-  • Create init.sql (14 tables)
-  • Setup RBAC (roles, permissions)
-  • Create test data
+${CYAN}[Fase 9]${RESET} Inicialización de MySQL
+  • Crear init.sql (14 tablas)
+  • Configurar RBAC (roles, permisos)
+  • Crear datos de prueba
 
-${CYAN}[Phase 10]${RESET} Nginx Configuration
-  • Configure reverse proxy
-  • Setup rate limiting
-  • Add security headers
+${CYAN}[Fase 10]${RESET} Configuración de Nginx
+  • Configurar proxy reverso
+  • Configurar rate limiting
+  • Agregar headers de seguridad
 
-${CYAN}[Phase 11]${RESET} Deployment
-  • Deploy with docker-compose
-  • Wait for health checks
-  • Verify all services running
+${CYAN}[Fase 11]${RESET} Despliegue
+  • Desplegar con docker-compose
+  • Esperar health checks
+  • Verificar que todos los servicios estén corriendo
 
-${CYAN}[Phase 12]${RESET} Testing & Validation
-  • Test authentication endpoints (4 types)
-  • Verify session management
-  • Test rate limiting
-  • Validate database isolation
+${CYAN}[Fase 12]${RESET} Pruebas y Validación
+  • Probar endpoints de autenticación (4 tipos)
+  • Verificar gestión de sesiones
+  • Probar rate limiting
+  • Validar aislamiento de base de datos
 
-${BOLD}Estimated Total Time:${RESET} ~3 hours 15 minutes
+${BOLD}Tiempo Total Estimado:${RESET} ~3 horas 15 minutos
 
-${BOLD}Critical Pauses:${RESET}
-  • Phase 1: User validation (manual test required)
-  • Phase 5: SSH port validation (manual test required)
+${BOLD}Pausas Críticas:${RESET}
+  • Fase 1: Validación de usuario (prueba manual requerida)
+  • Fase 5: Validación de puerto SSH (prueba manual requerida)
 
-${BOLD}Generated Secrets:${RESET}
-  All passwords and keys will be auto-generated and saved to:
+${BOLD}Secretos Generados:${RESET}
+  Todas las contraseñas y claves serán auto-generadas y guardadas en:
   ${SECRETS_FILE}
 "
 
-    read -p "Proceed with actual installation? [y/N]: " proceed
-    if [[ "$proceed" == "y" ]]; then return 0; else return 1; fi
+    read -p "¿Proceder con la instalación real? [s/N]: " proceed
+    if [[ "$proceed" == "s" ]]; then return 0; else return 1; fi
 }
 
-# Show table
+# Mostrar tabla
 show_table() {
     local header=("$1")
     shift
@@ -283,7 +283,7 @@ show_table() {
     echo ""
 }
 
-# Show checklist
+# Mostrar lista de verificación
 show_checklist() {
     local title="$1"
     shift
@@ -293,37 +293,37 @@ show_checklist() {
     echo -e "${BOLD}$title${RESET}"
     echo ""
     for item in "${items[@]}"; do
-        echo -e "  ${GREEN}☐${RESET} $item"
+        echo -e "  ${GREEN}[ ]${RESET} $item"
     done
     echo ""
 }
 
-# Countdown timer
+# Temporizador de cuenta regresiva
 countdown() {
     local seconds=$1
-    local message="${2:-Waiting...}"
+    local message="${2:-Esperando...}"
     
     for i in $(seq $seconds -1 1); do
         echo -ne "\r$message ${i}s  "
         sleep 1
     done
-    echo -e "\r$message Done!  "
+    echo -e "\r$message ¡Listo!  "
 }
 
-# Confirm action
+# Confirmar acción
 confirm_action() {
     local message="$1"
     local default="${2:-N}"
     
     local prompt
     if [[ "$default" == "Y" ]]; then
-        prompt="[Y/n]"
+        prompt="[S/n]"
     else
-        prompt="[y/N]"
+        prompt="[s/N]"
     fi
     
     read -p "$message $prompt: " response
     response=${response:-$default}
     
-    [[ "$response" =~ ^[Yy]$ ]]
+    [[ "$response" =~ ^[SsYy]$ ]]
 }

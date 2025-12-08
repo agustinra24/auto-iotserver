@@ -1,4 +1,4 @@
-"""Configuration and Redis Manager"""
+"""Configuración y Gestor de Redis"""
 import os
 from dotenv import load_dotenv
 import redis
@@ -31,13 +31,13 @@ settings = Settings()
 
 
 class RedisManager:
-    """Redis connection manager for user sessions"""
+    """Gestor de conexión Redis para sesiones de usuario"""
     
     _instance: Optional[redis.Redis] = None
     
     @classmethod
     def get_connection(cls) -> redis.Redis:
-        """Get or create Redis connection (singleton)"""
+        """Obtener o crear conexión Redis (singleton)"""
         if cls._instance is None:
             cls._instance = redis.Redis(
                 host=settings.REDIS_HOST,
@@ -51,27 +51,27 @@ class RedisManager:
     
     @classmethod
     def save_active_token(cls, user_id: int, user_type: str, jti: str, expires_in: int) -> None:
-        """Save active token JTI to Redis"""
+        """Guardar JTI de token activo en Redis"""
         redis_conn = cls.get_connection()
         key = f"session:{user_type}:{user_id}"
         redis_conn.setex(key, expires_in, jti)
     
     @classmethod
     def get_active_token(cls, user_id: int, user_type: str) -> Optional[str]:
-        """Get active token JTI"""
+        """Obtener JTI de token activo"""
         redis_conn = cls.get_connection()
         key = f"session:{user_type}:{user_id}"
         return redis_conn.get(key)
     
     @classmethod
     def delete_active_token(cls, user_id: int, user_type: str) -> None:
-        """Delete active token (logout)"""
+        """Eliminar token activo (logout)"""
         redis_conn = cls.get_connection()
         key = f"session:{user_type}:{user_id}"
         redis_conn.delete(key)
     
     @classmethod
     def is_token_valid(cls, user_id: int, user_type: str, jti: str) -> bool:
-        """Check if token JTI matches active session"""
+        """Verificar si el JTI del token coincide con la sesión activa"""
         active_jti = cls.get_active_token(user_id, user_type)
         return active_jti == jti if active_jti else False

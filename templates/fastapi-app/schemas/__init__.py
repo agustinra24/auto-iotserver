@@ -1,4 +1,4 @@
-"""Schemas package"""
+"""Paquete de Schemas"""
 from .auth import UserLogin, DeviceLogin, Token
 from .user import UserBase, UserCreate, UserResponse, ManagerBase, ManagerCreate, ManagerResponse
 from .device import DeviceBase, DeviceCreate, DeviceResponse

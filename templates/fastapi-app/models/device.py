@@ -1,4 +1,4 @@
-"""Device Model"""
+"""Modelo de Dispositivo"""
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -17,7 +17,7 @@ class Device(Base):
     admin_id = Column(Integer, ForeignKey("admin.id"), nullable=True)
     pasdispositivo_id = Column(Integer, ForeignKey("pasdispositivo.id"), nullable=True)
     
-    # Relationships
+    # Relaciones
     admin = relationship("Admin", back_populates="devices")
     pasdispositivo = relationship(
         "PasDispositivo",

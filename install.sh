@@ -1,28 +1,28 @@
 #!/bin/bash
 ################################################################################
-# IoT Fire Prevention Platform - Automated Installer v2.0
+# Plataforma IoT de Prevención de Incendios - Instalador Automatizado v2.0
 # 
-# Description: Interactive installation script for complete platform setup
-# Requirements: Fresh Debian 13 (Trixie), root/sudo access
-# Execution: sudo ./install.sh [--dry-run] [--resume]
+# Descripción: Script de instalación interactivo para configuración completa
+# Requisitos: Debian 13 (Trixie) limpio, acceso root/sudo
+# Ejecución: sudo ./install.sh [--dry-run] [--resume]
 #
-# Author: Based on GUIA_DEFINITIVA_2.0_COMPLETA.md
-# Date: 2024-11-26
+# Autor: Basado en GUIA_DEFINITIVA_2.0_COMPLETA.md
+# Fecha: 2024-11-26
 ################################################################################
 
-set -euo pipefail  # Exit on error, undefined vars, pipe failures
+set -euo pipefail  # Salir en error, variables indefinidas, fallos en pipes
 
-# Script directory (absolute path)
+# Directorio del script (ruta absoluta)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Load libraries
+# Cargar bibliotecas
 source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/ui.sh"
 source "${SCRIPT_DIR}/lib/validation.sh"
 source "${SCRIPT_DIR}/lib/secrets.sh"
 source "${SCRIPT_DIR}/lib/phases.sh"
 
-# Global variables
+# Variables globales
 INSTALL_STATE_FILE="${SCRIPT_DIR}/.install-state"
 CONFIG_FILE="${SCRIPT_DIR}/.config.env"
 SECRETS_FILE="${HOME}/.iot-platform/.secrets"
@@ -31,54 +31,54 @@ DRY_RUN=false
 RESUME_MODE=false
 
 ################################################################################
-# Pre-flight Checks
+# Verificaciones Previas
 ################################################################################
 preflight_checks() {
-    log_info "Running pre-flight checks..."
+    log_info "Ejecutando verificaciones previas..."
     
-    # Check if running as root or with sudo
+    # Verificar si se ejecuta como root o con sudo
     if [[ $EUID -ne 0 ]]; then
-        log_error "This script must be run as root or with sudo"
-        log_error "Usage: sudo ./install.sh"
+        log_error "Este script debe ejecutarse como root o con sudo"
+        log_error "Uso: sudo ./install.sh"
         exit 1
     fi
     
-    # Check OS version
+    # Verificar versión del sistema operativo
     if [[ ! -f /etc/debian_version ]]; then
-        log_error "This script requires Debian Linux"
+        log_error "Este script requiere Debian Linux"
         exit 1
     fi
     
     local debian_version=$(cat /etc/debian_version | cut -d. -f1)
     if [[ "$debian_version" != "13" ]] && [[ "$debian_version" != "trixie"* ]]; then
-        log_warning "This script is designed for Debian 13 (Trixie)"
-        log_warning "Your version: $(cat /etc/debian_version)"
-        read -p "Continue anyway? [y/N]: " confirm
-        [[ "$confirm" != "y" ]] && exit 1
+        log_warning "Este script está diseñado para Debian 13 (Trixie)"
+        log_warning "Tu versión: $(cat /etc/debian_version)"
+        read -p "¿Continuar de todos modos? [s/N]: " confirm
+        [[ "$confirm" != "s" ]] && exit 1
     fi
     
-    # Check required commands
+    # Verificar comandos requeridos
     local required_cmds=("git" "curl" "openssl" "bc")
     for cmd in "${required_cmds[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
-            log_error "Required command not found: $cmd"
-            log_error "Please install: apt-get update && apt-get install -y $cmd"
+            log_error "Comando requerido no encontrado: $cmd"
+            log_error "Por favor instala: apt-get update && apt-get install -y $cmd"
             exit 1
         fi
     done
     
-    # Check internet connectivity
+    # Verificar conectividad a internet
     if ! curl -s --max-time 5 https://google.com > /dev/null 2>&1; then
-        log_error "No internet connectivity detected"
-        log_error "This script requires internet access to download packages"
+        log_error "No se detectó conectividad a internet"
+        log_error "Este script requiere acceso a internet para descargar paquetes"
         exit 1
     fi
     
-    log_success "Pre-flight checks passed"
+    log_success "Verificaciones previas completadas"
 }
 
 ################################################################################
-# Parse Command Line Arguments
+# Procesar Argumentos de Línea de Comandos
 ################################################################################
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
@@ -96,7 +96,7 @@ parse_arguments() {
                 exit 0
                 ;;
             *)
-                log_error "Unknown option: $1"
+                log_error "Opción desconocida: $1"
                 show_help
                 exit 1
                 ;;
@@ -105,248 +105,262 @@ parse_arguments() {
 }
 
 ################################################################################
-# Show Help
+# Mostrar Ayuda
 ################################################################################
 show_help() {
     cat << EOF
-IoT Fire Prevention Platform - Automated Installer v2.0
+Plataforma IoT de Prevención de Incendios - Instalador Automatizado v2.0
 
-USAGE:
-    sudo ./install.sh [OPTIONS]
+USO:
+    sudo ./install.sh [OPCIONES]
 
-OPTIONS:
-    --dry-run       Preview installation steps without executing any changes.
-                    When this flag is used, the interactive menu is skipped
-                    and the script proceeds directly to show the installation plan.
-    --resume        Resume from last successful checkpoint
-    -h, --help      Show this help message
+OPCIONES:
+    --dry-run       Vista previa de los pasos de instalación sin ejecutar cambios.
+                    Cuando se usa esta bandera, el menú interactivo se omite
+                    y el script procede directamente a mostrar el plan de instalación.
+    --resume        Reanudar desde el último punto de control exitoso
+    -h, --help      Mostrar este mensaje de ayuda
 
-EXAMPLES:
-    # Normal installation (shows interactive menu)
+EJEMPLOS:
+    # Instalación normal (muestra menú interactivo)
     sudo ./install.sh
 
-    # Preview installation steps (skips menu, no system changes)
+    # Vista previa de pasos de instalación (omite menú, sin cambios al sistema)
     sudo ./install.sh --dry-run
 
-    # Resume after interruption
+    # Reanudar después de interrupción
     sudo ./install.sh --resume
 
-REQUIREMENTS:
-    - Fresh Debian 13 (Trixie) VPS
-    - Root or sudo access
-    - Internet connectivity
-    - Minimum 4GB RAM, 20GB disk
+REQUISITOS:
+    - VPS Debian 13 (Trixie) limpio
+    - Acceso root o sudo
+    - Conectividad a internet
+    - Mínimo 4GB RAM, 20GB disco
 
-For full documentation, see README.md
+Para documentación completa, consulta README.md
 EOF
 }
 
 ################################################################################
-# Welcome Screen
+# Pantalla de Bienvenida
 ################################################################################
 show_welcome() {
     clear
-    show_banner "IoT Fire Prevention Platform"
+    show_banner "Plataforma IoT de Prevención de Incendios"
     
     echo -e "
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
-${BOLD}              AUTOMATED INSTALLATION SYSTEM v2.0                   ${RESET}
+${BOLD}              SISTEMA DE INSTALACIÓN AUTOMATIZADO v2.0                   ${RESET}
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
 
-${YELLOW}⚠️  WARNING - READ CAREFULLY ⚠️${RESET}
+${YELLOW}ADVERTENCIA - LEE CUIDADOSAMENTE${RESET}
 
-This script will:
-  • Modify system configuration (firewall, SSH, users)
-  • Install Docker, MySQL, Redis, Nginx, and application code
-  • Change SSH port from 22 to custom port
-  • Remove default 'debian' user (if present)
-  • Configure production-grade security (5 layers)
+Este script hará:
+  • Modificar la configuración del sistema (firewall, SSH, usuarios)
+  • Instalar Docker, MySQL, Redis, Nginx y código de aplicación
+  • Cambiar el puerto SSH de 22 a un puerto personalizado
+  • Eliminar el usuario 'debian' por defecto (si existe)
+  • Configurar seguridad de grado producción (5 capas)
 
-${RED}CRITICAL REQUIREMENTS:${RESET}
-  ✓ Fresh Debian 13 VPS (not production system)
-  ✓ Stable internet connection
-  ✓ ~3-4 hours of dedicated time
-  ✓ VPS console access (in case SSH breaks)
+${RED}REQUISITOS CRÍTICOS:${RESET}
+  - VPS Debian 13 limpio (no sistema de producción)
+  - Conexión a internet estable
+  - ~3-4 horas de tiempo dedicado
+  - Acceso a consola VPS (en caso de que SSH falle)
 
-${GREEN}WHAT YOU'LL GET:${RESET}
-  ✓ Complete IoT platform with FastAPI backend
-  ✓ 4 authentication types (User, Admin, Manager, Device)
-  ✓ Cryptographic device authentication (AES-256 + HMAC)
-  ✓ MySQL + Redis active, MongoDB reserved for future
-  ✓ 5-layer security (nftables → Fail2Ban → Nginx → FastAPI → DB)
-  ✓ Zero database exposure (internal Docker network only)
-  ✓ Single session enforcement per user
+${GREEN}LO QUE OBTENDRÁS:${RESET}
+  - Plataforma IoT completa con backend FastAPI
+  - 4 tipos de autenticación (Usuario, Admin, Gerente, Dispositivo)
+  - Autenticación criptográfica de dispositivos (AES-256 + HMAC)
+  - MySQL + Redis activos, MongoDB reservado para futuro
+  - 5 capas de seguridad (nftables -> Fail2Ban -> Nginx -> FastAPI -> BD)
+  - Cero exposición de bases de datos (solo red interna Docker)
+  - Aplicación de sesión única por usuario
 
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
 "
 
     if [[ "$DRY_RUN" == true ]]; then
         echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════╗${RESET}"
-        echo -e "${CYAN}║  🔍 DRY-RUN MODE ACTIVE - No changes will be made to the system   ║${RESET}"
+        echo -e "${CYAN}║  MODO DRY-RUN ACTIVO - No se harán cambios al sistema   ║${RESET}"
         echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${RESET}"
         echo ""
     fi
 }
 
 ################################################################################
-# Main Menu
+# Menú Principal
 ################################################################################
 show_main_menu() {
     echo ""
-    echo -e "${BOLD}Select an option:${RESET}"
+    echo -e "${BOLD}Selecciona una opción:${RESET}"
     echo ""
-    echo -e "  ${GREEN}1)${RESET} Start Installation ${RED}(will modify your system)${RESET}"
-    echo -e "  ${CYAN}2)${RESET} Dry-Run ${CYAN}(preview only, no changes)${RESET}"
-    echo -e "  ${YELLOW}3)${RESET} Resume from checkpoint"
-    echo -e "  ${RED}4)${RESET} Exit"
+    echo -e "  ${GREEN}1)${RESET} Iniciar Instalación ${RED}(modificará tu sistema)${RESET}"
+    echo -e "  ${CYAN}2)${RESET} Dry-Run ${CYAN}(solo vista previa, sin cambios)${RESET}"
+    echo -e "  ${YELLOW}3)${RESET} Reanudar desde punto de control"
+    echo -e "  ${RED}4)${RESET} Salir"
     echo ""
-    echo -e "  ${YELLOW}TIP:${RESET} Use ${CYAN}--dry-run${RESET} flag to skip this menu and preview directly."
+    echo -e "  ${YELLOW}CONSEJO:${RESET} Usa la bandera ${CYAN}--dry-run${RESET} para omitir este menú y ver vista previa directamente."
     echo ""
     
     local choice
-    read -p "Enter choice [1-4]: " choice
+    read -p "Ingresa tu elección [1-4]: " choice
     
     case $choice in
         1)
-            # Confirm real installation
+            # Confirmar instalación real
             echo ""
-            echo -e "${YELLOW}⚠️  You are about to start a REAL installation.${RESET}"
-            echo -e "${YELLOW}   This will modify your system configuration.${RESET}"
-            read -p "Are you sure? [y/N]: " confirm_install
-            if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
-                log_info "Installation cancelled"
+            echo -e "${YELLOW}Estás a punto de iniciar una instalación REAL.${RESET}"
+            echo -e "${YELLOW}   Esto modificará la configuración de tu sistema.${RESET}"
+            read -p "¿Estás seguro? [s/N]: " confirm_install
+            if [[ "$confirm_install" != "s" && "$confirm_install" != "S" ]]; then
+                log_info "Instalación cancelada"
                 show_main_menu
                 return
             fi
-            DRY_RUN=false  # Explicitly set to false for real installation
+            DRY_RUN=false  # Establecer explícitamente en false para instalación real
             return 0
             ;;
         2)
             DRY_RUN=true
-            log_info "Entering dry-run mode (no changes will be made)..."
+            log_info "Entrando en modo dry-run (no se harán cambios)..."
             return 0
             ;;
         3)
             if [[ ! -f "$INSTALL_STATE_FILE" ]]; then
-                log_error "No checkpoint found. Cannot resume."
-                log_error "Start a new installation instead."
+                log_error "No se encontró punto de control. No se puede reanudar."
+                log_error "Inicia una nueva instalación en su lugar."
                 exit 1
             fi
             RESUME_MODE=true
             return 0
             ;;
         4)
-            log_info "Installation cancelled by user"
+            log_info "Instalación cancelada por el usuario"
             exit 0
             ;;
         *)
-            log_error "Invalid choice"
+            log_error "Opción inválida"
             show_main_menu
             ;;
     esac
 }
 
 ################################################################################
-# Collect User Inputs
+# Recolectar Datos del Usuario
 ################################################################################
 collect_user_inputs() {
-    log_info "Collecting configuration parameters..."
+    log_info "Recolectando parámetros de configuración..."
     echo ""
     
-    # Auto-detect current IP
+    # Mensaje informativo sobre valores por defecto
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${CYAN}║${RESET}  ${BOLD}INFORMACIÓN IMPORTANTE${RESET}                                            ${CYAN}║${RESET}"
+    echo -e "${CYAN}╠════════════════════════════════════════════════════════════════════════╣${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                        ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}  Los valores entre ${YELLOW}[corchetes]${RESET} son los valores por defecto o         ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}  auto-detectados por el sistema.                                       ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                        ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}  ${GREEN}Si deseas usar el valor por defecto: solo presiona ENTER${RESET}         ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}  ${GREEN}Si deseas cambiar el valor: escribe el nuevo valor y ENTER${RESET}       ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                        ${CYAN}║${RESET}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    
+    # Auto-detectar IP actual
     local detected_ip=$(hostname -I | awk '{print $1}')
     
-    # VPS IP Address
-    read -p "VPS IP Address [${detected_ip}]: " VPS_IP
+    # Dirección IP del VPS
+    read -p "Dirección IP del VPS [${detected_ip}]: " VPS_IP
     VPS_IP=${VPS_IP:-$detected_ip}
-    validate_ip "$VPS_IP" || { log_error "Invalid IP address"; exit 1; }
+    validate_ip "$VPS_IP" || { log_error "Dirección IP inválida"; exit 1; }
     
-    # New username
-    read -p "New username (will replace debian/root) [iotadmin]: " NEW_USERNAME
+    # Nuevo nombre de usuario
+    read -p "Nuevo nombre de usuario (reemplazará debian/root) [iotadmin]: " NEW_USERNAME
     NEW_USERNAME=${NEW_USERNAME:-iotadmin}
-    validate_username "$NEW_USERNAME" || { log_error "Invalid username"; exit 1; }
+    validate_username "$NEW_USERNAME" || { log_error "Nombre de usuario inválido"; exit 1; }
     
-    # SSH Port
-    read -p "SSH Port [5259]: " SSH_PORT
+    # Puerto SSH
+    read -p "Puerto SSH [5259]: " SSH_PORT
     SSH_PORT=${SSH_PORT:-5259}
-    validate_port "$SSH_PORT" || { log_error "Invalid port"; exit 1; }
+    validate_port "$SSH_PORT" || { log_error "Puerto inválido"; exit 1; }
     
-    # Domain (optional)
-    read -p "Domain name (optional, for future SSL) [none]: " DOMAIN
+    # Dominio (opcional)
+    read -p "Nombre de dominio (opcional, para SSL futuro) [ninguno]: " DOMAIN
     DOMAIN=${DOMAIN:-none}
     
-    # MySQL database name
-    read -p "MySQL database name [iot_platform]: " DB_NAME
+    # Nombre de base de datos MySQL
+    read -p "Nombre de base de datos MySQL [iot_platform]: " DB_NAME
     DB_NAME=${DB_NAME:-iot_platform}
-    validate_db_name "$DB_NAME" || { log_error "Invalid database name"; exit 1; }
+    validate_db_name "$DB_NAME" || { log_error "Nombre de base de datos inválido"; exit 1; }
     
-    # Docker subnet
-    read -p "Docker network subnet [172.20.0.0/16]: " DOCKER_SUBNET
+    # Subred Docker
+    read -p "Subred de red Docker [172.20.0.0/16]: " DOCKER_SUBNET
     DOCKER_SUBNET=${DOCKER_SUBNET:-172.20.0.0/16}
-    validate_subnet "$DOCKER_SUBNET" || { log_error "Invalid subnet"; exit 1; }
+    validate_subnet "$DOCKER_SUBNET" || { log_error "Subred inválida"; exit 1; }
     
-    # Redis memory limit
-    read -p "Redis memory limit [256MB]: " REDIS_MEMORY
+    # Límite de memoria Redis
+    read -p "Límite de memoria Redis [256MB]: " REDIS_MEMORY
     REDIS_MEMORY=${REDIS_MEMORY:-256MB}
     
-    # Timezone (auto-detect)
+    # Zona horaria (auto-detectar)
     local detected_tz=$(timedatectl show -p Timezone --value 2>/dev/null || echo "UTC")
-    read -p "Timezone [${detected_tz}]: " TIMEZONE
+    read -p "Zona horaria [${detected_tz}]: " TIMEZONE
     TIMEZONE=${TIMEZONE:-$detected_tz}
     
     echo ""
-    log_success "Configuration collected"
+    log_success "Configuración recolectada"
 }
 
 ################################################################################
-# Generate Configuration Summary
+# Generar Resumen de Configuración
 ################################################################################
 show_configuration_summary() {
     echo ""
-    show_section_header "Configuration Summary"
+    show_section_header "Resumen de Configuración"
     
     echo -e "
-${BOLD}System Configuration:${RESET}
-  VPS IP:           ${GREEN}${VPS_IP}${RESET}
-  New Username:     ${GREEN}${NEW_USERNAME}${RESET}
-  SSH Port:         ${GREEN}${SSH_PORT}${RESET}
-  Domain:           ${GREEN}${DOMAIN}${RESET}
-  Timezone:         ${GREEN}${TIMEZONE}${RESET}
+${BOLD}Configuración del Sistema:${RESET}
+  IP del VPS:        ${GREEN}${VPS_IP}${RESET}
+  Nuevo Usuario:     ${GREEN}${NEW_USERNAME}${RESET}
+  Puerto SSH:        ${GREEN}${SSH_PORT}${RESET}
+  Dominio:           ${GREEN}${DOMAIN}${RESET}
+  Zona Horaria:      ${GREEN}${TIMEZONE}${RESET}
 
-${BOLD}Database Configuration:${RESET}
-  Database Name:    ${GREEN}${DB_NAME}${RESET}
-  Docker Subnet:    ${GREEN}${DOCKER_SUBNET}${RESET}
-  Redis Memory:     ${GREEN}${REDIS_MEMORY}${RESET}
+${BOLD}Configuración de Base de Datos:${RESET}
+  Nombre de BD:      ${GREEN}${DB_NAME}${RESET}
+  Subred Docker:     ${GREEN}${DOCKER_SUBNET}${RESET}
+  Memoria Redis:     ${GREEN}${REDIS_MEMORY}${RESET}
 
-${BOLD}Auto-Generated Secrets:${RESET}
-  MySQL Root Password:   ${CYAN}[generated]${RESET}
-  MySQL User Password:   ${CYAN}[generated]${RESET}
-  Redis Password:        ${CYAN}[generated]${RESET}
-  JWT Secret Key:        ${CYAN}[generated]${RESET}
+${BOLD}Secretos Auto-Generados:${RESET}
+  Contraseña Root MySQL:   ${CYAN}[generada]${RESET}
+  Contraseña Usuario MySQL: ${CYAN}[generada]${RESET}
+  Contraseña Redis:         ${CYAN}[generada]${RESET}
+  Clave Secreta JWT:        ${CYAN}[generada]${RESET}
   
-${YELLOW}Secrets will be saved to: ${SECRETS_FILE}${RESET}
-${YELLOW}You MUST backup this file after installation!${RESET}
+${YELLOW}Los secretos se guardarán en: ${SECRETS_FILE}${RESET}
+${YELLOW}¡DEBES respaldar este archivo después de la instalación!${RESET}
 "
     
     if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${CYAN}═══ DRY-RUN MODE: No changes will be made ═══${RESET}"
+        echo -e "${CYAN}═══ MODO DRY-RUN: No se harán cambios ═══${RESET}"
         echo ""
     fi
     
-    read -p "Proceed with installation? [y/N]: " confirm
-    if [[ "$confirm" != "y" ]]; then log_info "Installation cancelled"; exit 0; fi
+    read -p "¿Proceder con la instalación? [s/N]: " confirm
+    if [[ "$confirm" != "s" ]]; then log_info "Instalación cancelada"; exit 0; fi
 }
 
 ################################################################################
-# Save Configuration
+# Guardar Configuración
 ################################################################################
 save_configuration() {
-    log_info "Saving configuration..."
+    log_info "Guardando configuración..."
     
-    # Create config file
+    # Crear archivo de configuración
     cat > "$CONFIG_FILE" << EOF
-# IoT Platform Installation Configuration
-# Generated: $(date)
+# Configuración de Instalación de Plataforma IoT
+# Generado: $(date)
 
 VPS_IP="$VPS_IP"
 NEW_USERNAME="$NEW_USERNAME"
@@ -357,47 +371,47 @@ DOCKER_SUBNET="$DOCKER_SUBNET"
 REDIS_MEMORY="$REDIS_MEMORY"
 TIMEZONE="$TIMEZONE"
 
-# Paths
+# Rutas
 INSTALL_DIR="/home/${NEW_USERNAME}/iot-platform"
 SCRIPT_DIR="$SCRIPT_DIR"
 SECRETS_FILE="$SECRETS_FILE"
 EOF
     
     chmod 600 "$CONFIG_FILE"
-    log_success "Configuration saved to $CONFIG_FILE"
+    log_success "Configuración guardada en $CONFIG_FILE"
 }
 
 ################################################################################
-# Execute Installation Phases
+# Ejecutar Fases de Instalación
 ################################################################################
 execute_installation() {
     local start_phase=0
     
-    # Load checkpoint if resuming
+    # Cargar punto de control si se reanuda
     if [[ "$RESUME_MODE" == true ]]; then
         source "$INSTALL_STATE_FILE"
         start_phase=$((LAST_COMPLETED_PHASE + 1))
-        log_info "Resuming from Phase $start_phase"
+        log_info "Reanudando desde la Fase $start_phase"
     fi
     
-    # Load configuration
+    # Cargar configuración
     [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
     
-    # Generate secrets if not resuming
+    # Generar secretos si no se reanuda
     if [[ "$start_phase" -eq 0 && "$DRY_RUN" != true ]]; then
         generate_all_secrets
     else
-        # Load existing secrets
+        # Cargar secretos existentes
         mkdir -p "$(dirname "$SECRETS_FILE")"
         [[ -f "$SECRETS_FILE" ]] && source "$SECRETS_FILE"
     fi
     
-    # Show installation plan
-    show_section_header "Installation Plan"
+    # Mostrar plan de instalación
+    show_section_header "Plan de Instalación"
     echo ""
-    echo "Total phases: 13 (FASE 0 - FASE 12)"
-    echo "Estimated time: ~3 hours 15 minutes"
-    echo "Starting from: Phase $start_phase"
+    echo "Total de fases: 13 (FASE 0 - FASE 12)"
+    echo "Tiempo estimado: ~3 horas 15 minutos"
+    echo "Iniciando desde: Fase $start_phase"
     echo ""
     
     if [[ "$DRY_RUN" == true ]]; then
@@ -409,7 +423,7 @@ execute_installation() {
         fi
     fi
     
-    # Execute phases
+    # Ejecutar fases
     local phases=(
         "phase_0_preparation"
         "phase_1_user_management"
@@ -434,21 +448,21 @@ execute_installation() {
         
         show_phase_header "$phase_num" "$total_phases" "${phase_func}"
         
-        # Execute phase
+        # Ejecutar fase
         $phase_func
         
-        # Save checkpoint
+        # Guardar punto de control
         save_checkpoint "$phase_num"
         
         show_phase_complete "$phase_num"
     done
     
-    # Installation complete
+    # Instalación completada
     show_installation_complete
 }
 
 ################################################################################
-# Save Checkpoint
+# Guardar Punto de Control
 ################################################################################
 save_checkpoint() {
     local phase_num=$1
@@ -459,62 +473,105 @@ TIMESTAMP=$(date +%s)
 DATE="$(date)"
 EOF
     
-    log_info "Checkpoint saved (Phase $phase_num)"
+    log_info "Punto de control guardado (Fase $phase_num)"
 }
 
 ################################################################################
-# Show Installation Complete
+# Mostrar Instalación Completada
 ################################################################################
 show_installation_complete() {
     clear
-    show_banner "Installation Complete!"
+    show_banner "Instalacion Completada"
     
     echo -e "
-${GREEN}╔═══════════════════════════════════════════════════════════════════╗
-║                                                                   ║
-║          ✓ IoT PLATFORM INSTALLED SUCCESSFULLY                    ║
-║                                                                   ║
-╚═══════════════════════════════════════════════════════════════════╝${RESET}
+${GREEN}+===================================================================+
+|                                                                   |
+|            INSTALACION COMPLETADA EXITOSAMENTE                    |
+|                                                                   |
++===================================================================+${RESET}
 
-${BOLD}Installation Summary:${RESET}
-  Duration:         $(calculate_duration)
-  Phases Completed: 13/13
-  Status:           ${GREEN}SUCCESS${RESET}
+  Duracion total:     $(calculate_duration)
+  Fases completadas:  13 de 13
+  Estado:             ${GREEN}EXITO${RESET}
 
-${BOLD}Access Information:${RESET}
-  SSH Access:       ${CYAN}ssh $NEW_USERNAME@$VPS_IP -p $SSH_PORT${RESET}
-  API Endpoint:     ${CYAN}http://$VPS_IP/api/v1${RESET}
-  Health Check:     ${CYAN}http://$VPS_IP/health${RESET}
 
-${BOLD}Default Credentials (CHANGE IMMEDIATELY):${RESET}
-  Admin:            ${YELLOW}admin@iot-platform.com / admin123${RESET}
-  User:             ${YELLOW}user@iot-platform.com / user123${RESET}
-  Manager:          ${YELLOW}manager@iot-platform.com / manager123${RESET}
+${RED}+-------------------------------------------------------------------+
+|  ACCION INMEDIATA REQUERIDA                                       |
++-------------------------------------------------------------------+${RESET}
 
-${BOLD}Secrets Location:${RESET}
-  ${RED}${SECRETS_FILE}${RESET}
-  
-  ${YELLOW}⚠️  CRITICAL: Backup this file NOW! ⚠️${RESET}
-  
-  Run: ${CYAN}cat ${SECRETS_FILE}${RESET}
+  El archivo de secretos contiene TODAS las contrasenas generadas.
+  Si pierdes este archivo, perderas acceso a la base de datos.
 
-${BOLD}Next Steps:${RESET}
-  1. Backup secrets file
-  2. Change default passwords via API
-  3. Test authentication: curl http://$VPS_IP/api/v1/auth/login/admin
-  4. Setup SSL/TLS (recommended)
-  5. Configure monitoring
+  Ubicacion:  ${BOLD}${SECRETS_FILE}${RESET}
 
-${BOLD}Documentation:${RESET}
-  Installation log: ${LOG_FILE}
-  Full guide:       GUIA_DEFINITIVA_2.0_COMPLETA.md
+  Ejecuta AHORA para ver y respaldar tus secretos:
 
-${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}
+    ${CYAN}cat ${SECRETS_FILE}${RESET}
+
+  Guarda este archivo en un lugar seguro fuera del servidor.
+
+
+${YELLOW}+-------------------------------------------------------------------+
+|  CREDENCIALES POR DEFECTO - CAMBIAR INMEDIATAMENTE                |
++-------------------------------------------------------------------+${RESET}
+
+  Las siguientes cuentas de prueba fueron creadas con contrasenas
+  temporales. Debes cambiarlas antes de usar el sistema en produccion.
+
+  ${BOLD}Cuenta${RESET}                              ${BOLD}Contrasena temporal${RESET}
+  ------------------------------------  --------------------
+    admin@iot-platform.com                password123
+    user@iot-platform.com                 password123
+    manager@iot-platform.com              password123
+
+
+${BLUE}+-------------------------------------------------------------------+
+|  COMO ACCEDER A TU PLATAFORMA                                     |
++-------------------------------------------------------------------+${RESET}
+
+  ${BOLD}Conexion SSH (administracion del servidor):${RESET}
+
+    ssh ${NEW_USERNAME}@${VPS_IP} -p ${SSH_PORT}
+
+  ${BOLD}API REST (integracion de aplicaciones):${RESET}
+
+    Endpoint base:    http://${VPS_IP}/api/v1
+    Verificar estado: http://${VPS_IP}/health
+
+  ${BOLD}Probar autenticacion:${RESET}
+
+    curl -X POST http://${VPS_IP}/api/v1/auth/login/admin \\
+      -H \"Content-Type: application/json\" \\
+      -d '{\"email\":\"admin@iot-platform.com\",\"password\":\"password123\"}'
+
+
+${CYAN}+-------------------------------------------------------------------+
+|  PROXIMOS PASOS RECOMENDADOS                                      |
++-------------------------------------------------------------------+${RESET}
+
+  1. Respaldar el archivo de secretos (ver arriba)
+  2. Cambiar las contrasenas por defecto usando la API
+  3. Configurar certificado SSL/TLS para conexiones seguras
+  4. Configurar sistema de monitoreo y alertas
+  5. Revisar y ajustar reglas del firewall segun tus necesidades
+
+
+${WHITE}+-------------------------------------------------------------------+
+|  DOCUMENTACION Y SOPORTE                                          |
++-------------------------------------------------------------------+${RESET}
+
+  Log de instalacion:  ${LOG_FILE}
+  Guia completa:       GUIA_DEFINITIVA_2.0_COMPLETA.md
+
+
+${GREEN}====================================================================${RESET}
+${BOLD}          Gracias por usar el instalador de Plataforma IoT          ${RESET}
+${GREEN}====================================================================${RESET}
 "
 }
 
 ################################################################################
-# Calculate Duration
+# Calcular Duración
 ################################################################################
 calculate_duration() {
     if [[ -f "$INSTALL_STATE_FILE" ]]; then
@@ -534,40 +591,40 @@ calculate_duration() {
 }
 
 ################################################################################
-# Main Execution
+# Ejecución Principal
 ################################################################################
 main() {
-    # Setup logging
+    # Configurar logging
     mkdir -p "$(dirname "$LOG_FILE")"
     exec > >(tee -a "$LOG_FILE")
     exec 2>&1
     
-    # Parse arguments
+    # Procesar argumentos
     parse_arguments "$@"
     
-    # Pre-flight checks
+    # Verificaciones previas
     preflight_checks
     
-    # Show welcome and menu (skip menu if --dry-run was passed via CLI)
+    # Mostrar bienvenida y menú (omitir menú si --dry-run fue pasado por CLI)
     if [[ "$RESUME_MODE" != true ]]; then
         show_welcome
         
-        # If --dry-run flag was passed, skip the menu entirely
+        # Si la bandera --dry-run fue pasada, omitir el menú completamente
         if [[ "$DRY_RUN" == true ]]; then
-            log_info "Dry-run mode activated via --dry-run flag. Skipping menu..."
+            log_info "Modo dry-run activado vía bandera --dry-run. Omitiendo menú..."
             echo ""
         else
             show_main_menu
         fi
     fi
     
-    # Collect inputs or load config
+    # Recolectar datos o cargar configuración
     if [[ "$RESUME_MODE" == true ]]; then
         if [[ ! -f "$CONFIG_FILE" ]]; then
-            log_error "Configuration file not found. Cannot resume."
+            log_error "Archivo de configuración no encontrado. No se puede reanudar."
             exit 1
         fi
-        log_info "Loading saved configuration..."
+        log_info "Cargando configuración guardada..."
         [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
     else
         collect_user_inputs
@@ -575,9 +632,9 @@ main() {
         [[ "$DRY_RUN" != true ]] && save_configuration
     fi
     
-    # Execute installation
+    # Ejecutar instalación
     execute_installation
 }
 
-# Run main function
+# Ejecutar función principal
 main "$@"

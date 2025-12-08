@@ -1,9 +1,9 @@
 #!/bin/bash
 ################################################################################
-# lib/common.sh - Common utilities and logging functions
+# lib/common.sh - Utilidades comunes y funciones de logging
 ################################################################################
 
-# Colors
+# Colores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -12,17 +12,17 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-# Logging functions
+# Funciones de logging
 log_info() {
     echo -e "${BLUE}[INFO]${RESET} $1"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${RESET} $1"
+    echo -e "${GREEN}[ÉXITO]${RESET} $1"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${RESET} $1"
+    echo -e "${YELLOW}[ADVERTENCIA]${RESET} $1"
 }
 
 log_error() {
@@ -35,15 +35,15 @@ log_debug() {
     fi
 }
 
-# Execute command with logging
+# Ejecutar comando con logging
 exec_cmd() {
     local cmd="$1"
-    local description="${2:-Executing command}"
+    local description="${2:-Ejecutando comando}"
     
-    log_debug "Command: $cmd"
+    log_debug "Comando: $cmd"
     
     if [[ "$DRY_RUN" == true ]]; then
-        echo -e "${CYAN}[DRY-RUN]${RESET} Would execute: $cmd"
+        echo -e "${CYAN}[DRY-RUN]${RESET} Ejecutaría: $cmd"
         return 0
     fi
     
@@ -52,84 +52,84 @@ exec_cmd() {
         return 0
     else
         local exit_code=$?
-        log_error "$description failed (exit code: $exit_code)"
-        log_error "Check log file: $LOG_FILE"
+        log_error "$description falló (código de salida: $exit_code)"
+        log_error "Revisar archivo de log: $LOG_FILE"
         return $exit_code
     fi
 }
 
-# Error handler
+# Manejador de errores
 error_handler() {
     local line_num=$1
-    log_error "Script failed at line $line_num"
-    log_error "Last command: $BASH_COMMAND"
-    log_error "Check log: $LOG_FILE"
+    log_error "Script falló en la línea $line_num"
+    log_error "Último comando: $BASH_COMMAND"
+    log_error "Revisar log: $LOG_FILE"
     
-    # Offer to save state
+    # Ofrecer guardar estado
     if [[ -n "${CURRENT_PHASE:-}" ]]; then
-        log_warning "Installation interrupted at Phase $CURRENT_PHASE"
-        log_info "You can resume later with: sudo ./install.sh --resume"
+        log_warning "Instalación interrumpida en la Fase $CURRENT_PHASE"
+        log_info "Puedes reanudar después con: sudo ./install.sh --resume"
     fi
     
     exit 1
 }
 
-# Set error trap
+# Establecer trampa de errores
 trap 'error_handler $LINENO' ERR
 
-# Check if command exists
+# Verificar si el comando existe
 command_exists() {
     command -v "$1" &> /dev/null
 }
 
-# Wait for user confirmation
+# Esperar confirmación del usuario
 wait_for_confirmation() {
-    local message="${1:-Press ENTER to continue}"
+    local message="${1:-Presiona ENTER para continuar}"
     read -p "$message: "
 }
 
-# Detect current user type (root, debian, other)
+# Detectar tipo de usuario actual (root, debian, otro)
 detect_current_user() {
     if [[ $EUID -eq 0 ]]; then
         echo "root"
     elif [[ "$USER" == "debian" ]]; then
         echo "debian"
     else
-        echo "other"
+        echo "otro"
     fi
 }
 
-# Check if service is running
+# Verificar si el servicio está ejecutándose
 is_service_running() {
     local service=$1
     systemctl is-active --quiet "$service"
 }
 
-# Backup file
+# Respaldar archivo
 backup_file() {
     local file=$1
     if [[ -f "$file" ]]; then
         local backup="${file}.backup-$(date +%Y%m%d-%H%M%S)"
         cp "$file" "$backup"
-        log_info "Backed up: $file → $backup"
+        log_info "Respaldado: $file → $backup"
     fi
 }
 
-# Replace string in file
+# Reemplazar cadena en archivo
 replace_in_file() {
     local file=$1
     local search=$2
     local replace=$3
     
     if [[ ! -f "$file" ]]; then
-        log_error "File not found: $file"
+        log_error "Archivo no encontrado: $file"
         return 1
     fi
     
     sed -i "s|${search}|${replace}|g" "$file"
 }
 
-# Create directory with permissions
+# Crear directorio con permisos
 create_dir() {
     local dir=$1
     local perms=${2:-755}
@@ -140,7 +140,7 @@ create_dir() {
     chown "$owner" "$dir"
 }
 
-# Download file with retry
+# Descargar archivo con reintentos
 download_file() {
     local url=$1
     local dest=$2
@@ -148,43 +148,43 @@ download_file() {
     
     for i in $(seq 1 $max_retries); do
         if curl -fsSL "$url" -o "$dest"; then
-            log_success "Downloaded: $url"
+            log_success "Descargado: $url"
             return 0
         else
-            log_warning "Download attempt $i/$max_retries failed"
+            log_warning "Intento de descarga $i/$max_retries falló"
             sleep 2
         fi
     done
     
-    log_error "Failed to download: $url"
+    log_error "Falló al descargar: $url"
     return 1
 }
 
-# Check port availability
+# Verificar disponibilidad del puerto
 is_port_available() {
     local port=$1
     ! ss -tlnp | grep -q ":${port} "
 }
 
-# Get system info
+# Obtener información del sistema
 get_system_info() {
     cat << EOF
-OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)
+SO: $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)
 Kernel: $(uname -r)
-CPU: $(nproc) cores
+CPU: $(nproc) núcleos
 RAM: $(free -h | awk '/^Mem:/ {print $2}')
-Disk: $(df -h / | awk 'NR==2 {print $4}') available
+Disco: $(df -h / | awk 'NR==2 {print $4}') disponible
 EOF
 }
 
-# Calculate progress percentage
+# Calcular porcentaje de progreso
 calc_progress() {
     local current=$1
     local total=$2
     echo $(( (current * 100) / total ))
 }
 
-# Format duration
+# Formatear duración
 format_duration() {
     local seconds=$1
     local hours=$((seconds / 3600))
@@ -193,53 +193,53 @@ format_duration() {
     printf "%02d:%02d:%02d" $hours $minutes $secs
 }
 
-# Check system resources
+# Verificar recursos del sistema
 check_system_resources() {
     local min_ram_mb=3072  # 3GB
     local min_disk_gb=15
     
-    # Check RAM
+    # Verificar RAM
     local total_ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
     local total_ram_mb=$((total_ram_kb / 1024))
     
     if [[ $total_ram_mb -lt $min_ram_mb ]]; then
-        log_warning "Low RAM: ${total_ram_mb}MB (recommended: ${min_ram_mb}MB)"
-        log_warning "Installation may be slow or fail"
+        log_warning "RAM baja: ${total_ram_mb}MB (recomendado: ${min_ram_mb}MB)"
+        log_warning "La instalación puede ser lenta o fallar"
     fi
     
-    # Check disk space
+    # Verificar espacio en disco
     local avail_disk_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
     
     if [[ $avail_disk_gb -lt $min_disk_gb ]]; then
-        log_error "Insufficient disk space: ${avail_disk_gb}GB (minimum: ${min_disk_gb}GB)"
+        log_error "Espacio en disco insuficiente: ${avail_disk_gb}GB (mínimo: ${min_disk_gb}GB)"
         return 1
     fi
     
     return 0
 }
 
-# Generate random string
+# Generar cadena aleatoria
 generate_random_string() {
     local length=${1:-32}
     openssl rand -base64 $length | tr -d "=+/" | cut -c1-$length
 }
 
-# Generate random hex
+# Generar hexadecimal aleatorio
 generate_random_hex() {
     local length=${1:-32}
     openssl rand -hex $length
 }
 
-# Check if running in Docker
+# Verificar si se ejecuta en Docker
 is_docker() {
     [[ -f /.dockerenv ]] || grep -q docker /proc/1/cgroup 2>/dev/null
 }
 
-# Ensure not running in Docker
+# Asegurar que no se ejecuta en Docker
 ensure_not_docker() {
     if is_docker; then
-        log_error "This script cannot run inside a Docker container"
-        log_error "Please run on the host system"
+        log_error "Este script no puede ejecutarse dentro de un contenedor Docker"
+        log_error "Por favor ejecuta en el sistema host"
         exit 1
     fi
 }

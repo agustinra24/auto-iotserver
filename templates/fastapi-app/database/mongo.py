@@ -1,5 +1,5 @@
 """
-MongoDB Configuration for IoT Sensor Data
+Configuración de MongoDB para Datos de Sensores IoT
 """
 from pymongo import MongoClient
 from pymongo.database import Database
@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 
 class MongoDBManager:
-    """MongoDB connection manager (Singleton)"""
+    """Gestor de conexión MongoDB (Singleton)"""
     
     _client: Optional[MongoClient] = None
     _database: Optional[Database] = None
     
     @classmethod
     def get_client(cls) -> MongoClient:
-        """Get or create MongoDB client"""
+        """Obtener o crear cliente MongoDB"""
         if cls._client is None:
             try:
                 from urllib.parse import quote_plus
@@ -41,73 +41,73 @@ class MongoDBManager:
                 )
                 
                 cls._client.admin.command('ping')
-                logger.info(f"MongoDB connected: {settings.MONGO_HOST}:{settings.MONGO_PORT}")
+                logger.info(f"MongoDB conectado: {settings.MONGO_HOST}:{settings.MONGO_PORT}")
                 
             except Exception as e:
-                logger.error(f"MongoDB connection error: {e}")
+                logger.error(f"Error de conexión MongoDB: {e}")
                 raise
         
         return cls._client
     
     @classmethod
     def get_database(cls) -> Database:
-        """Get configured database"""
+        """Obtener base de datos configurada"""
         if cls._database is None:
             client = cls.get_client()
             cls._database = client[settings.MONGO_DATABASE]
-            logger.info(f"Database selected: {settings.MONGO_DATABASE}")
+            logger.info(f"Base de datos seleccionada: {settings.MONGO_DATABASE}")
         return cls._database
     
     @classmethod
     def get_collection(cls, collection_name: str) -> Collection:
-        """Get specific collection"""
+        """Obtener colección específica"""
         db = cls.get_database()
         return db[collection_name]
     
     @classmethod
     def close_connection(cls) -> None:
-        """Close MongoDB connection"""
+        """Cerrar conexion MongoDB"""
         if cls._client:
             cls._client.close()
             cls._client = None
             cls._database = None
-            logger.info("🔌 MongoDB connection closed")
+            logger.info("Conexion MongoDB cerrada")
 
 
 def get_sensor_readings_collection() -> Collection:
-    """Get sensor readings collection"""
+    """Obtener colección de lecturas de sensores"""
     return MongoDBManager.get_collection("sensor_readings")
 
 
 def get_device_logs_collection() -> Collection:
-    """Get device logs collection"""
+    """Obtener colección de logs de dispositivos"""
     return MongoDBManager.get_collection("device_logs")
 
 
 def get_alerts_collection() -> Collection:
-    """Get alerts collection"""
+    """Obtener colección de alertas"""
     return MongoDBManager.get_collection("alerts")
 
 
 def create_indexes():
-    """Create MongoDB indexes for optimized queries"""
+    """Crear índices de MongoDB para consultas optimizadas"""
     try:
-        # sensor_readings indexes
+        # Índices de sensor_readings
         sensor_readings = get_sensor_readings_collection()
         sensor_readings.create_index([("device_id", 1), ("timestamp", -1)])
         sensor_readings.create_index([("sensor_type", 1)])
         sensor_readings.create_index([("timestamp", -1)])
         
-        # device_logs indexes
+        # Índices de device_logs
         device_logs = get_device_logs_collection()
         device_logs.create_index([("device_id", 1), ("timestamp", -1)])
         
-        # alerts indexes
+        # Índices de alerts
         alerts = get_alerts_collection()
         alerts.create_index([("device_id", 1), ("resolved", 1)])
         alerts.create_index([("timestamp", -1)])
         
-        logger.info("MongoDB indexes created successfully")
+        logger.info("Índices de MongoDB creados exitosamente")
         
     except Exception as e:
-        logger.error(f"Error creating MongoDB indexes: {e}")
+        logger.error(f"Error al crear índices de MongoDB: {e}")

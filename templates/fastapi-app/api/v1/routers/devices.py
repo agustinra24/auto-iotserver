@@ -1,4 +1,4 @@
-"""Devices Router"""
+"""Router de Dispositivos"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import secrets
@@ -19,10 +19,10 @@ def create_device(
     db: Session = Depends(get_db)
 ):
     """
-    Create an IoT device.
+    Crear un dispositivo IoT.
     
-    Requires `create_device` permission.
-    Creates pasdispositivo with auto-generated api_key and encryption_key.
+    Requiere permiso `create_device`.
+    Crea pasdispositivo con api_key y encryption_key auto-generados.
     """
     try:
         role_name = getattr(getattr(current_admin, "rol", None), "nombre", None)
@@ -32,16 +32,16 @@ def create_device(
     if role_name != "admin_master":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Only admin_master can create devices"
+            detail="Solo admin_master puede crear dispositivos"
         )
     
     admin = db.query(Admin).filter(Admin.id == payload.admin_id).first()
     if not admin:
-        return ResponseFormatter.error("Admin not found")
+        return ResponseFormatter.error("Administrador no encontrado")
     
-    # Create pasdispositivo with auto-generated api_key and encryption_key
+    # Crear pasdispositivo con api_key y encryption_key auto-generados
     pas = PasDispositivo()
-    pas.encryption_key = secrets.token_bytes(32)  # 32 bytes for AES-256
+    pas.encryption_key = secrets.token_bytes(32)  # 32 bytes para AES-256
     db.add(pas)
     db.flush()
     
@@ -56,7 +56,7 @@ def create_device(
     db.commit()
     db.refresh(device)
     
-    return ResponseFormatter.success(device, "Device created successfully")
+    return ResponseFormatter.success(device, "Dispositivo creado exitosamente")
 
 
 @router.get("/")
@@ -64,9 +64,9 @@ def list_devices(
     current_admin=Depends(require_permission("view_reports")),
     db: Session = Depends(get_db)
 ):
-    """List all devices"""
+    """Listar todos los dispositivos"""
     devices = db.query(Device).all()
-    return ResponseFormatter.success(devices, "Devices listed successfully")
+    return ResponseFormatter.success(devices, "Dispositivos listados exitosamente")
 
 
 @router.get("/{device_id}")
@@ -75,8 +75,8 @@ def get_device(
     current_admin=Depends(require_permission("view_reports")),
     db: Session = Depends(get_db)
 ):
-    """Get device by ID"""
+    """Obtener dispositivo por ID"""
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-    return ResponseFormatter.success(device, "Device retrieved successfully")
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+    return ResponseFormatter.success(device, "Dispositivo obtenido exitosamente")

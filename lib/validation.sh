@@ -1,52 +1,52 @@
 #!/bin/bash
 ################################################################################
-# lib/validation.sh - Input validation functions
+# lib/validation.sh - Funciones de validación de entrada
 ################################################################################
 
-# Validate IP address
+# Validar dirección IP
 validate_ip() {
     local ip=$1
     
-    # IPv4 regex
+    # Regex IPv4
     if [[ $ip =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-        # Check each octet is 0-255
+        # Verificar que cada octeto sea 0-255
         local IFS='.'
         local -a octets=($ip)
         for octet in "${octets[@]}"; do
             if [[ $octet -gt 255 ]]; then
-                log_error "Invalid IP address: $ip (octet > 255)"
+                log_error "Dirección IP inválida: $ip (octeto > 255)"
                 return 1
             fi
         done
         return 0
     else
-        log_error "Invalid IP address format: $ip"
+        log_error "Formato de dirección IP inválido: $ip"
         return 1
     fi
 }
 
-# Validate username
+# Validar nombre de usuario
 validate_username() {
     local username=$1
     
-    # Check length
+    # Verificar longitud
     if [[ ${#username} -lt 3 ]] || [[ ${#username} -gt 32 ]]; then
-        log_error "Username must be 3-32 characters"
+        log_error "El nombre de usuario debe tener 3-32 caracteres"
         return 1
     fi
     
-    # Check format (alphanumeric, underscore, hyphen)
+    # Verificar formato (alfanumérico, guión bajo, guión)
     if [[ ! $username =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-        log_error "Username must start with lowercase letter or underscore"
-        log_error "Can only contain lowercase letters, numbers, underscore, hyphen"
+        log_error "El nombre de usuario debe comenzar con letra minúscula o guión bajo"
+        log_error "Solo puede contener letras minúsculas, números, guión bajo, guión"
         return 1
     fi
     
-    # Check reserved names
+    # Verificar nombres reservados
     local reserved_names=("root" "admin" "administrator" "system" "daemon" "bin" "sys")
     for reserved in "${reserved_names[@]}"; do
         if [[ "$username" == "$reserved" ]]; then
-            log_error "Username '$username' is reserved"
+            log_error "El nombre de usuario '$username' está reservado"
             return 1
         fi
     done
@@ -54,205 +54,205 @@ validate_username() {
     return 0
 }
 
-# Validate port number
+# Validar número de puerto
 validate_port() {
     local port=$1
     
     if [[ ! $port =~ ^[0-9]+$ ]]; then
-        log_error "Port must be a number"
+        log_error "El puerto debe ser un número"
         return 1
     fi
     
     if [[ $port -lt 1 ]] || [[ $port -gt 65535 ]]; then
-        log_error "Port must be between 1 and 65535"
+        log_error "El puerto debe estar entre 1 y 65535"
         return 1
     fi
     
-    # Warn about common ports
+    # Advertir sobre puertos comunes
     if [[ $port -eq 22 ]]; then
-        log_warning "Port 22 is the default SSH port"
-        log_warning "Recommend using a custom port like 5259"
+        log_warning "El puerto 22 es el puerto SSH por defecto"
+        log_warning "Se recomienda usar un puerto personalizado como 5259"
     fi
     
     if [[ $port -lt 1024 ]]; then
-        log_warning "Port $port is in privileged range (< 1024)"
+        log_warning "El puerto $port está en el rango privilegiado (< 1024)"
     fi
     
     return 0
 }
 
-# Validate database name
+# Validar nombre de base de datos
 validate_db_name() {
     local db_name=$1
     
-    # Check length
+    # Verificar longitud
     if [[ ${#db_name} -lt 1 ]] || [[ ${#db_name} -gt 64 ]]; then
-        log_error "Database name must be 1-64 characters"
+        log_error "El nombre de base de datos debe tener 1-64 caracteres"
         return 1
     fi
     
-    # Check format (alphanumeric and underscore only)
+    # Verificar formato (solo alfanumérico y guión bajo)
     if [[ ! $db_name =~ ^[a-zA-Z0-9_]+$ ]]; then
-        log_error "Database name can only contain letters, numbers, and underscores"
+        log_error "El nombre de base de datos solo puede contener letras, números y guiones bajos"
         return 1
     fi
     
-    # Cannot start with number
+    # No puede comenzar con número
     if [[ $db_name =~ ^[0-9] ]]; then
-        log_error "Database name cannot start with a number"
+        log_error "El nombre de base de datos no puede comenzar con un número"
         return 1
     fi
     
     return 0
 }
 
-# Validate subnet
+# Validar subred
 validate_subnet() {
     local subnet=$1
     
-    # Check CIDR format
+    # Verificar formato CIDR
     if [[ ! $subnet =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
-        log_error "Invalid subnet format. Expected: x.x.x.x/y"
+        log_error "Formato de subred inválido. Esperado: x.x.x.x/y"
         return 1
     fi
     
-    # Extract IP and mask
+    # Extraer IP y máscara
     local ip="${subnet%/*}"
     local mask="${subnet#*/}"
     
-    # Validate IP part
+    # Validar parte de IP
     validate_ip "$ip" || return 1
     
-    # Validate mask
+    # Validar máscara
     if [[ $mask -lt 8 ]] || [[ $mask -gt 32 ]]; then
-        log_error "Subnet mask must be between /8 and /32"
+        log_error "La máscara de subred debe estar entre /8 y /32"
         return 1
     fi
     
     return 0
 }
 
-# Validate domain name
+# Validar nombre de dominio
 validate_domain() {
     local domain=$1
     
-    # Allow "none" or empty
+    # Permitir "none" o vacío
     if [[ -z "$domain" ]] || [[ "$domain" == "none" ]]; then
         return 0
     fi
     
-    # Check format
+    # Verificar formato
     if [[ ! $domain =~ ^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$ ]]; then
-        log_error "Invalid domain format"
+        log_error "Formato de dominio inválido"
         return 1
     fi
     
     return 0
 }
 
-# Validate memory size (e.g., 256MB, 1GB)
+# Validar tamaño de memoria (ej: 256MB, 1GB)
 validate_memory_size() {
     local size=$1
     
     if [[ ! $size =~ ^[0-9]+[MG]B$ ]]; then
-        log_error "Invalid memory size. Expected format: 256MB or 1GB"
+        log_error "Tamaño de memoria inválido. Formato esperado: 256MB o 1GB"
         return 1
     fi
     
     return 0
 }
 
-# Validate timezone
+# Validar zona horaria
 validate_timezone() {
     local tz=$1
     
     if [[ ! -f "/usr/share/zoneinfo/$tz" ]]; then
-        log_warning "Timezone '$tz' not found in system database"
-        log_warning "Using UTC instead"
+        log_warning "Zona horaria '$tz' no encontrada en la base de datos del sistema"
+        log_warning "Usando UTC en su lugar"
         return 1
     fi
     
     return 0
 }
 
-# Check if user exists
+# Verificar si el usuario existe
 user_exists() {
     local username=$1
     id -u "$username" &>/dev/null
 }
 
-# Check if port is in use
+# Verificar si el puerto está en uso
 port_in_use() {
     local port=$1
     ss -tlnp | grep -q ":${port} "
 }
 
-# Validate SSH access
+# Validar acceso SSH
 validate_ssh_access() {
     local user=$1
     local host=$2
     local port=$3
     local timeout=${4:-5}
     
-    log_info "Testing SSH access: $user@$host:$port"
+    log_info "Probando acceso SSH: $user@$host:$port"
     
     if timeout $timeout ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p "$port" "$user@$host" "exit" 2>/dev/null; then
-        log_success "SSH access validated"
+        log_success "Acceso SSH validado"
         return 0
     else
-        log_error "Cannot connect via SSH"
+        log_error "No se puede conectar vía SSH"
         return 1
     fi
 }
 
-# Validate system meets minimum requirements
+# Validar que el sistema cumple los requisitos mínimos
 validate_system_requirements() {
     local errors=0
     
-    log_info "Validating system requirements..."
+    log_info "Validando requisitos del sistema..."
     
-    # RAM check
+    # Verificar RAM
     local total_ram_mb=$(free -m | awk '/^Mem:/ {print $2}')
     if [[ $total_ram_mb -lt 3072 ]]; then
-        log_warning "RAM: ${total_ram_mb}MB (recommended: 4096MB)"
+        log_warning "RAM: ${total_ram_mb}MB (recomendado: 4096MB)"
     else
-        log_success "RAM: ${total_ram_mb}MB ✓"
+        log_success "RAM: ${total_ram_mb}MB"
     fi
     
-    # Disk space check
+    # Verificar espacio en disco
     local avail_disk_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
     if [[ $avail_disk_gb -lt 15 ]]; then
-        log_error "Disk space: ${avail_disk_gb}GB (minimum: 20GB)"
+        log_error "Espacio en disco: ${avail_disk_gb}GB (mínimo: 20GB)"
         ((errors++))
     else
-        log_success "Disk space: ${avail_disk_gb}GB ✓"
+        log_success "Espacio en disco: ${avail_disk_gb}GB"
     fi
     
-    # CPU check
+    # Verificar CPU
     local cpu_cores=$(nproc)
     if [[ $cpu_cores -lt 2 ]]; then
-        log_warning "CPU cores: $cpu_cores (recommended: 2+)"
+        log_warning "Núcleos CPU: $cpu_cores (recomendado: 2+)"
     else
-        log_success "CPU cores: $cpu_cores ✓"
+        log_success "Núcleos CPU: $cpu_cores"
     fi
     
-    # Internet check
+    # Verificar internet
     if ! ping -c 1 8.8.8.8 &>/dev/null; then
-        log_error "No internet connectivity"
+        log_error "Sin conectividad a internet"
         ((errors++))
     else
-        log_success "Internet connectivity ✓"
+        log_success "Conectividad a internet"
     fi
     
     return $errors
 }
 
-# Validate configuration file
+# Validar archivo de configuración
 validate_config() {
     local config_file=$1
     
     if [[ ! -f "$config_file" ]]; then
-        log_error "Configuration file not found: $config_file"
+        log_error "Archivo de configuración no encontrado: $config_file"
         return 1
     fi
     
@@ -269,7 +269,7 @@ validate_config() {
     local errors=0
     for var in "${required_vars[@]}"; do
         if [[ -z "${!var}" ]]; then
-            log_error "Missing required variable: $var"
+            log_error "Variable requerida faltante: $var"
             ((errors++))
         fi
     done
@@ -277,12 +277,12 @@ validate_config() {
     return $errors
 }
 
-# Validate secrets file
+# Validar archivo de secretos
 validate_secrets() {
     local secrets_file=$1
     
     if [[ ! -f "$secrets_file" ]]; then
-        log_error "Secrets file not found: $secrets_file"
+        log_error "Archivo de secretos no encontrado: $secrets_file"
         return 1
     fi
     
@@ -298,16 +298,16 @@ validate_secrets() {
     local errors=0
     for secret in "${required_secrets[@]}"; do
         if [[ -z "${!secret}" ]]; then
-            log_error "Missing secret: $secret"
+            log_error "Secreto faltante: $secret"
             ((errors++))
         fi
     done
     
-    # Check file permissions
+    # Verificar permisos del archivo
     local perms=$(stat -c '%a' "$secrets_file")
     if [[ "$perms" != "600" ]]; then
-        log_warning "Secrets file has insecure permissions: $perms"
-        log_warning "Fixing permissions to 600"
+        log_warning "El archivo de secretos tiene permisos inseguros: $perms"
+        log_warning "Corrigiendo permisos a 600"
         chmod 600 "$secrets_file"
     fi
     

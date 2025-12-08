@@ -1,4 +1,4 @@
-"""Service Model"""
+"""Modelo de Servicio"""
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -18,7 +18,7 @@ class Service(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     gerente_id = Column(Integer, ForeignKey("gerente.id"), nullable=True)
     
-    # Relationships
+    # Relaciones
     gerente = relationship("Manager", back_populates="servicios")
     dispositivos = relationship("Device", secondary="servicio_dispositivo", back_populates="servicios")
     apps = relationship("App", secondary="servicio_app", back_populates="servicios")

@@ -1,4 +1,4 @@
-"""Database configuration package"""
+"""Paquete de configuración de base de datos"""
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from typing import Generator
@@ -15,7 +15,7 @@ Base = declarative_base()
 
 
 def get_db() -> Generator:
-    """Database session dependency"""
+    """Dependencia de sesión de base de datos"""
     db = SessionLocal()
     try:
         yield db

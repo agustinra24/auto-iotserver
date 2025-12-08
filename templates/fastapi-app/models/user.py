@@ -1,4 +1,4 @@
-"""User Model"""
+"""Modelo de Usuario"""
 from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -17,6 +17,6 @@ class User(Base):
     rol_id = Column(Integer, ForeignKey("rol.id"), nullable=True)
     pasusuario_id = Column(Integer, ForeignKey("pasusuario.id"), nullable=True)
     
-    # Relationships
+    # Relaciones
     rol = relationship("Role", back_populates="usuarios")
     pasusuario = relationship("PasUsuario", back_populates="usuario", uselist=False)

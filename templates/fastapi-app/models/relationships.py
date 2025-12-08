@@ -1,9 +1,9 @@
-"""Many-to-Many relationship tables"""
+"""Tablas de relación Muchos-a-Muchos"""
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, Table
 from datetime import datetime
 from database import Base
 
-# Role-Permission junction
+# Unión Rol-Permiso
 rol_permiso = Table(
     "rol_permiso",
     Base.metadata,
@@ -13,7 +13,7 @@ rol_permiso = Table(
     Column("created_at", DateTime, default=datetime.utcnow)
 )
 
-# User-Service junction
+# Unión Usuario-Servicio
 usuario_servicio = Table(
     "usuario_servicio",
     Base.metadata,
@@ -24,7 +24,7 @@ usuario_servicio = Table(
     Column("fecha_asignacion", DateTime, default=datetime.utcnow)
 )
 
-# Service-Device junction
+# Unión Servicio-Dispositivo
 servicio_dispositivo = Table(
     "servicio_dispositivo",
     Base.metadata,
@@ -35,7 +35,7 @@ servicio_dispositivo = Table(
     Column("fecha_asignacion", DateTime, default=datetime.utcnow)
 )
 
-# Service-App junction
+# Unión Servicio-Aplicación
 servicio_app = Table(
     "servicio_app",
     Base.metadata,

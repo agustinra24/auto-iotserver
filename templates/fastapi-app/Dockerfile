@@ -1,5 +1,5 @@
 # =============================================================================
-# Dockerfile - FastAPI for IoT Platform
+# Dockerfile - FastAPI para Plataforma IoT
 # =============================================================================
 FROM python:3.11-slim
 
@@ -10,10 +10,10 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-# Create non-root user
+# Crear usuario no-root
 RUN groupadd -r fastapi && useradd -r -g fastapi fastapi
 
-# Install system dependencies
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     default-libmysqlclient-dev \
@@ -23,14 +23,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy and install requirements
+# Copiar e instalar dependencias
 COPY --chown=fastapi:fastapi requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copiar código de la aplicación
 COPY --chown=fastapi:fastapi . .
 
-# Create log directories
+# Crear directorios de logs
 RUN mkdir -p /var/log/fastapi/sessions && chown -R fastapi:fastapi /var/log/fastapi
 
 USER fastapi

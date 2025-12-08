@@ -1,6 +1,6 @@
 """
-Fire Prevention Platform - Main Application
-FastAPI with MongoDB for sensor data
+Plataforma de Prevención de Incendios - Aplicación Principal
+FastAPI con MongoDB para datos de sensores
 """
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -15,35 +15,35 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle management"""
-    # Startup
+    """Gestión del ciclo de vida de la aplicación"""
+    # Inicio
     try:
-        logger.info("🚀 Starting application...")
+        logger.info("Iniciando aplicacion...")
         MongoDBManager.get_client()
         create_indexes()
-        logger.info("✅ Application started successfully")
+        logger.info("Aplicacion iniciada exitosamente")
     except Exception as e:
-        logger.error(f"❌ Startup error: {e}")
+        logger.error(f"Error de inicio: {e}")
     
     yield
     
-    # Shutdown
+    # Cierre
     try:
-        logger.info("🔌 Closing connections...")
+        logger.info("Cerrando conexiones...")
         MongoDBManager.close_connection()
-        logger.info("✅ Application stopped")
+        logger.info("Aplicacion detenida")
     except Exception as e:
-        logger.error(f"❌ Shutdown error: {e}")
+        logger.error(f"Error de cierre: {e}")
 
 
 app = FastAPI(
-    title="Fire Prevention System API",
-    description="IoT Platform with cryptographic device authentication",
+    title="API del Sistema de Prevención de Incendios",
+    description="Plataforma IoT con autenticación criptográfica de dispositivos",
     version="2.3.0",
     lifespan=lifespan
 )
 
-# Include routers
+# Incluir routers
 app.include_router(auth.router, prefix="/api/v1/auth")
 app.include_router(users.router, prefix="/api/v1/users")
 app.include_router(devices.router, prefix="/api/v1/devices")
@@ -67,13 +67,13 @@ def custom_openapi():
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "JWT token for users, admins and managers"
+            "description": "Token JWT para usuarios, administradores y gerentes"
         },
         "DeviceAuth": {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "JWT token for IoT devices (POST /device/login)"
+            "description": "Token JWT para dispositivos IoT (POST /device/login)"
         }
     }
     
@@ -108,7 +108,7 @@ app.openapi = custom_openapi
 
 @app.get("/")
 def root():
-    return {"message": "Fire Prevention API v2.3", "status": "operational"}
+    return {"message": "API de Prevención de Incendios v2.3", "status": "operacional"}
 
 
 @app.get("/health")

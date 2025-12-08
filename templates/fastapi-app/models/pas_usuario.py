@@ -1,4 +1,4 @@
-"""User Password Table"""
+"""Tabla de Contraseña de Usuario"""
 from sqlalchemy import Column, Integer, String, LargeBinary
 from sqlalchemy.orm import relationship
 from database import Base

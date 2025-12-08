@@ -1,1 +1,1 @@
-"""API package"""
+"""Paquete de API"""

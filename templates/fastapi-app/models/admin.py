@@ -1,4 +1,4 @@
-"""Admin Model"""
+"""Modelo de Administrador"""
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -15,7 +15,7 @@ class Admin(Base):
     rol_id = Column(Integer, ForeignKey("rol.id"), nullable=True)
     pasadmin_id = Column(Integer, ForeignKey("pasadmin.id"), nullable=True)
     
-    # Relationships
+    # Relaciones
     rol = relationship("Role", back_populates="admins")
     pasadmin = relationship("PasAdmin", back_populates="admin", uselist=False, foreign_keys=[pasadmin_id])
     managers = relationship("Manager", back_populates="admin")

@@ -1,6 +1,6 @@
 # =============================================================================
-# IoT Fire Prevention Platform - Docker Compose
-# MongoDB ACTIVE for sensor data
+# Plataforma IoT de Prevención de Incendios - Docker Compose
+# MongoDB ACTIVO para datos de sensores
 # =============================================================================
 
 networks:
@@ -12,7 +12,7 @@ networks:
 
 services:
   # ==========================================================================
-  # MySQL - Relational Database
+  # MySQL - Base de Datos Relacional
   # ==========================================================================
   mysql:
     image: mysql:8.0
@@ -44,7 +44,7 @@ services:
           memory: 512M
 
   # ==========================================================================
-  # MongoDB - Sensor Data (ACTIVE)
+  # MongoDB - Datos de Sensores (ACTIVO)
   # ==========================================================================
   mongodb:
     image: mongo:7.0
@@ -74,7 +74,7 @@ services:
           memory: 512M
 
   # ==========================================================================
-  # Redis - Sessions & Cache
+  # Redis - Sesiones y Caché
   # ==========================================================================
   redis:
     image: redis:7-alpine
@@ -105,7 +105,7 @@ services:
           memory: 256M
 
   # ==========================================================================
-  # FastAPI - Application
+  # FastAPI - Aplicación
   # ==========================================================================
   fastapi:
     build:
@@ -162,7 +162,7 @@ services:
           memory: 1G
 
   # ==========================================================================
-  # Nginx - Reverse Proxy
+  # Nginx - Proxy Inverso
   # ==========================================================================
   nginx:
     image: nginx:1.25-alpine

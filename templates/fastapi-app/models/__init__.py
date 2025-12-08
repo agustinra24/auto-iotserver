@@ -1,4 +1,4 @@
-"""Models package - Import all models for SQLAlchemy"""
+"""Paquete de Modelos - Importar todos los modelos para SQLAlchemy"""
 from .service import Service
 from .device import Device
 from .admin import Admin

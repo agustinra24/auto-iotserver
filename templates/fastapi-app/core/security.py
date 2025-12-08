@@ -1,5 +1,5 @@
 """
-Security Module - JWT, Password Hashing (Argon2), Session Management
+Módulo de Seguridad - JWT, Hash de Contraseñas (Argon2), Gestión de Sesiones
 """
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
@@ -12,7 +12,7 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# ARGON2 - No 72 character limit
+# ARGON2 - Sin límite de 72 caracteres
 pwd_context = CryptContext(
     schemes=["argon2"],
     deprecated="auto",
@@ -23,23 +23,23 @@ pwd_context = CryptContext(
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password against Argon2 hash"""
+    """Verificar contraseña contra hash Argon2"""
     if hashed_password is None:
         return False
     try:
         return pwd_context.verify(plain_password, hashed_password)
     except Exception as e:
-        logger.warning(f"Password verification failed: {e}")
+        logger.warning(f"Fallo en verificación de contraseña: {e}")
         return False
 
 
 def get_password_hash(password: str) -> str:
-    """Generate Argon2 hash from password"""
+    """Generar hash Argon2 a partir de contraseña"""
     return pwd_context.hash(password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create JWT with unique JTI for session tracking"""
+    """Crear JWT con JTI único para seguimiento de sesión"""
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
     
@@ -55,21 +55,21 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def decode_token(token: str) -> Dict[str, Any]:
-    """Decode and validate JWT"""
+    """Decodificar y validar JWT"""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
     except JWTError as e:
-        logger.warning(f"Token decode error: {e}")
+        logger.warning(f"Error al decodificar token: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Token inválido o expirado",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
 
 def extract_jti_from_token(token: str) -> str:
-    """Extract JTI from token"""
+    """Extraer JTI del token"""
     try:
         payload = decode_token(token)
         return payload.get("jti", "")

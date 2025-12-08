@@ -1,4 +1,4 @@
-"""Authentication Routes - 4 login types + logout + testing endpoints"""
+"""Rutas de Autenticación - 4 tipos de login + logout + endpoints de prueba"""
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
 from sqlalchemy.orm import Session
 from typing import Any, Optional
@@ -26,10 +26,10 @@ router = APIRouter(tags=["Authentication"])
 @async_safe
 def login_user(form_data: UserLogin, request: Request, db: Session = Depends(get_db)) -> Any:
     """
-    User login - password authentication.
+    Login de usuario - autenticación por contraseña.
     
-    ⚠️ SINGLE SESSION: Returns 409 Conflict if session already active.
-    Must logout first using POST /logout.
+    SESION UNICA: Retorna 409 Conflict si ya hay sesión activa.
+    Debe cerrar sesión primero usando POST /logout.
     """
     return AuthService.auth_by_password(
         User, "user", 
@@ -48,9 +48,9 @@ def login_user(form_data: UserLogin, request: Request, db: Session = Depends(get
 @async_safe
 def login_admin(form_data: UserLogin, request: Request, db: Session = Depends(get_db)) -> Any:
     """
-    Admin login - password authentication.
+    Login de administrador - autenticación por contraseña.
     
-    ⚠️ SINGLE SESSION: Returns 409 Conflict if session already active.
+    SESION UNICA: Retorna 409 Conflict si ya hay sesión activa.
     """
     return AuthService.auth_by_password(
         Admin, "admin", 
@@ -69,9 +69,9 @@ def login_admin(form_data: UserLogin, request: Request, db: Session = Depends(ge
 @async_safe
 def login_manager(form_data: UserLogin, request: Request, db: Session = Depends(get_db)) -> Any:
     """
-    Manager login - password authentication.
+    Login de gerente - autenticación por contraseña.
     
-    ⚠️ SINGLE SESSION: Returns 409 Conflict if session already active.
+    SESION UNICA: Retorna 409 Conflict si ya hay sesión activa.
     """
     return AuthService.auth_by_password(
         Manager, "manager", 
@@ -88,9 +88,9 @@ def login_manager(form_data: UserLogin, request: Request, db: Session = Depends(
 @async_safe
 def login_device(device: DeviceLogin, request: Request, db: Session = Depends(get_db)) -> Any:
     """
-    Device login - Cryptographic puzzle authentication.
+    Login de dispositivo - Autenticación por rompecabezas criptográfico.
     
-    ⚠️ SINGLE SESSION: Returns 409 Conflict if session already active.
+    SESION UNICA: Retorna 409 Conflict si ya hay sesión activa.
     """
     return AuthService.auth_by_puzzle_device(
         device.device_id, 
@@ -106,18 +106,18 @@ def login_device(device: DeviceLogin, request: Request, db: Session = Depends(ge
 @async_safe
 def logout(request: Request, authorization: Optional[str] = Header(None)):
     """
-    Logout - Invalidate current session in Redis.
+    Logout - Invalidar sesión actual en Redis.
     
-    Requires JWT token in Authorization: Bearer <token>
+    Requiere token JWT en Authorization: Bearer <token>
     
-    Returns:
-    - 204 No Content: Logout successful
-    - 401 Unauthorized: Invalid or missing token
+    Retorna:
+    - 204 No Content: Logout exitoso
+    - 401 Unauthorized: Token inválido o faltante
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization token required",
+            detail="Se requiere token de autorización",
             headers={"WWW-Authenticate": "Bearer"}
         )
     
@@ -131,14 +131,14 @@ def logout(request: Request, authorization: Optional[str] = Header(None)):
         if not user_id or not user_type:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
+                detail="Token inválido"
             )
         
-        # For devices, sub is the device_id
+        # Para dispositivos, sub es el device_id
         if user_type == "device":
             user_id = int(user_id)
         else:
-            # For users/admins/managers, we need the id claim
+            # Para usuarios/admins/managers, necesitamos el claim id
             user_id = payload.get("id")
         
         SessionService.invalidate_session(
@@ -155,26 +155,26 @@ def logout(request: Request, authorization: Optional[str] = Header(None)):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Logout error: {str(e)}"
+            detail=f"Error de logout: {str(e)}"
         )
 
 
 # =============================================================================
-# TESTING ENDPOINTS - Keep for demonstrations
+# ENDPOINTS DE PRUEBA - Mantener para demostraciones
 # =============================================================================
 
 @router.post("/device/generate-puzzle-test", tags=["Testing"])
 def generate_puzzle_for_testing(device_id: int, db: Session = Depends(get_db)):
     """
-    🧪 TESTING ENDPOINT - Generate puzzle for a device.
+    ENDPOINT DE PRUEBA - Generar puzzle para un dispositivo.
     
-    ⚠️ FOR DEVELOPMENT/TESTING ONLY
-    In production, the DEVICE generates the puzzle, NOT the server.
+    SOLO PARA DESARROLLO/PRUEBAS
+    En producción, el DISPOSITIVO genera el puzzle, NO el servidor.
     
-    Usage in Swagger:
-    1. Call this endpoint with device_id
-    2. Copy the 'puzzle' object from response
-    3. Use it in 'puzzle_response' field of POST /device/login
+    Uso en Swagger:
+    1. Llama este endpoint con device_id
+    2. Copia el objeto 'puzzle' de la respuesta
+    3. Úsalo en el campo 'puzzle_response' de POST /device/login
     """
     import os
     import hashlib
@@ -184,12 +184,12 @@ def generate_puzzle_for_testing(device_id: int, db: Session = Depends(get_db)):
     
     db_device = db.query(Device).filter(Device.id == device_id).first()
     if not db_device:
-        raise HTTPException(status_code=404, detail=f"Device with ID {device_id} not found")
+        raise HTTPException(status_code=404, detail=f"Dispositivo con ID {device_id} no encontrado")
     
     if not db_device.pasdispositivo_id:
         raise HTTPException(
             status_code=400, 
-            detail=f"Device {device_id} has no pasdispositivo_id"
+            detail=f"Dispositivo {device_id} no tiene pasdispositivo_id"
         )
     
     pas_disp = db.query(PasDispositivo).filter(PasDispositivo.id == db_device.pasdispositivo_id).first()
@@ -197,7 +197,7 @@ def generate_puzzle_for_testing(device_id: int, db: Session = Depends(get_db)):
     if not pas_disp:
         raise HTTPException(
             status_code=400,
-            detail=f"PasDispositivo with ID {db_device.pasdispositivo_id} not found"
+            detail=f"PasDispositivo con ID {db_device.pasdispositivo_id} no encontrado"
         )
     
     crypto_manager = CryptoManager(db)
@@ -206,17 +206,17 @@ def generate_puzzle_for_testing(device_id: int, db: Session = Depends(get_db)):
     if not device_key:
         raise HTTPException(
             status_code=400,
-            detail=f"Device {device_id} has no encryption_key. Use /device/init-encryption-key first."
+            detail=f"Dispositivo {device_id} no tiene encryption_key. Usa /device/init-encryption-key primero."
         )
     
     if len(device_key) != 32:
         raise HTTPException(
             status_code=500,
-            detail=f"Device encryption_key has {len(device_key)} bytes (expected: 32). "
-                   f"Regenerate with POST /device/init-encryption-key?device_id={device_id}"
+            detail=f"encryption_key del dispositivo tiene {len(device_key)} bytes (esperado: 32). "
+                   f"Regenera con POST /device/init-encryption-key?device_id={device_id}"
         )
     
-    # Generate puzzle (simulating device behavior)
+    # Generar puzzle (simulando comportamiento del dispositivo)
     ran_dev = os.urandom(32)
     hmac_key = device_key + crypto_manager.server_key
     parametro_id = hmac.new(hmac_key, ran_dev, hashlib.sha256).digest()
@@ -229,18 +229,18 @@ def generate_puzzle_for_testing(device_id: int, db: Session = Depends(get_db)):
     }
     
     return {
-        "message": "Puzzle generated successfully. Copy 'puzzle' object for POST /device/login",
+        "message": "Puzzle generado exitosamente. Copia el objeto 'puzzle' para POST /device/login",
         "device_id": device_id,
         "api_key": pas_disp.api_key,
         "puzzle": puzzle,
         "instructions": {
-            "step_1": "Copy the 'puzzle' object above",
-            "step_2": "Go to POST /device/login",
-            "step_3": "Use this payload:",
+            "step_1": "Copia el objeto 'puzzle' de arriba",
+            "step_2": "Ve a POST /device/login",
+            "step_3": "Usa este payload:",
             "payload_example": {
                 "device_id": device_id,
                 "api_key": pas_disp.api_key,
-                "puzzle_response": "<PASTE_PUZZLE_OBJECT_HERE>"
+                "puzzle_response": "<PEGA_OBJETO_PUZZLE_AQUÍ>"
             }
         }
     }
@@ -249,24 +249,24 @@ def generate_puzzle_for_testing(device_id: int, db: Session = Depends(get_db)):
 @router.post("/device/init-encryption-key", tags=["Testing"])
 def init_device_encryption_key(device_id: int, db: Session = Depends(get_db)):
     """
-    🧪 TESTING ENDPOINT - Initialize/regenerate device encryption_key.
+    ENDPOINT DE PRUEBA - Inicializar/regenerar encryption_key del dispositivo.
     
-    ⚠️ FOR DEVELOPMENT/TESTING ONLY
+    SOLO PARA DESARROLLO/PRUEBAS
     
-    Generates a new 32-byte encryption_key and saves it to DB.
+    Genera una nueva encryption_key de 32 bytes y la guarda en BD.
     
-    WARNING: This invalidates any previous puzzles generated with old key.
+    ADVERTENCIA: Esto invalida cualquier puzzle previo generado con la clave anterior.
     """
     from core.crypto_new import CryptoManager
     
     db_device = db.query(Device).filter(Device.id == device_id).first()
     if not db_device:
-        raise HTTPException(status_code=404, detail=f"Device with ID {device_id} not found")
+        raise HTTPException(status_code=404, detail=f"Dispositivo con ID {device_id} no encontrado")
     
     if not db_device.pasdispositivo_id:
         raise HTTPException(
             status_code=400,
-            detail=f"Device {device_id} has no pasdispositivo_id"
+            detail=f"Dispositivo {device_id} no tiene pasdispositivo_id"
         )
     
     pas_disp = db.query(PasDispositivo).filter(PasDispositivo.id == db_device.pasdispositivo_id).first()
@@ -274,7 +274,7 @@ def init_device_encryption_key(device_id: int, db: Session = Depends(get_db)):
     if not pas_disp:
         raise HTTPException(
             status_code=400,
-            detail=f"PasDispositivo with ID {db_device.pasdispositivo_id} not found"
+            detail=f"PasDispositivo con ID {db_device.pasdispositivo_id} no encontrado"
         )
     
     crypto_manager = CryptoManager(db)
@@ -283,7 +283,7 @@ def init_device_encryption_key(device_id: int, db: Session = Depends(get_db)):
         key = crypto_manager.register_device_key(device_id)
         
         return {
-            "message": "Encryption key generated and saved successfully",
+            "message": "Clave de cifrado generada y guardada exitosamente",
             "device_id": device_id,
             "key_length": len(key),
             "api_key": pas_disp.api_key,
@@ -293,9 +293,9 @@ def init_device_encryption_key(device_id: int, db: Session = Depends(get_db)):
                 "pasdispositivo_id": db_device.pasdispositivo_id
             },
             "next_steps": {
-                "1": "Use POST /device/generate-puzzle-test to generate a puzzle",
-                "2": "Or implement puzzle generation in the real device"
+                "1": "Usa POST /device/generate-puzzle-test para generar un puzzle",
+                "2": "O implementa la generación de puzzle en el dispositivo real"
             }
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating key: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al generar clave: {str(e)}")

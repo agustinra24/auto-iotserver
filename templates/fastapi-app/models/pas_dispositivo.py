@@ -1,4 +1,4 @@
-"""Device API Key / Encryption Key Table"""
+"""Tabla de API Key / Clave de Cifrado de Dispositivo"""
 from sqlalchemy import Column, Integer, String, LargeBinary
 from sqlalchemy.orm import relationship
 import secrets
@@ -18,6 +18,6 @@ class PasDispositivo(Base):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if not self.api_key:
-            # Auto-generate API key if not provided
+            # Auto-generar API key si no se proporciona
             alphabet = string.ascii_letters + string.digits
             self.api_key = ''.join(secrets.choice(alphabet) for _ in range(32))

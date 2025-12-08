@@ -1,16 +1,16 @@
-"""Authentication Schemas"""
+"""Schemas de Autenticación"""
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
 
 
 class UserLogin(BaseModel):
-    """Login schema for users, admins, managers"""
+    """Schema de login para usuarios, administradores y gerentes"""
     email: EmailStr
     password: str
 
 
 class DeviceLogin(BaseModel):
-    """Login schema for devices with cryptographic puzzle"""
+    """Schema de login para dispositivos con puzzle criptográfico"""
     device_id: int
     api_key: str
     puzzle_response: Optional[Dict[str, Any]] = None
@@ -33,7 +33,7 @@ class DeviceLogin(BaseModel):
 
 
 class Token(BaseModel):
-    """Token response schema"""
+    """Schema de respuesta de token"""
     access_token: str
     token_type: str = "bearer"
     user_id: Optional[int] = None

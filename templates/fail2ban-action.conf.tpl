@@ -1,7 +1,7 @@
 [Definition]
 
-# Fail2Ban action for nftables
-# Adds/removes IPs to/from nftables dynamic set
+# Acción de Fail2Ban para nftables
+# Agrega/elimina IPs al/del conjunto dinámico de nftables
 
 actionstart = 
 

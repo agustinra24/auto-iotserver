@@ -1,4 +1,4 @@
-"""Users Router"""
+"""Router de Usuarios"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -17,8 +17,8 @@ router = APIRouter(tags=["Users"])
 @router.get("/me")
 @async_safe
 def read_users_me(current_user=Depends(get_current_user)):
-    """Get current user profile"""
-    return ResponseFormatter.success(current_user, "Profile retrieved successfully")
+    """Obtener perfil del usuario actual"""
+    return ResponseFormatter.success(current_user, "Perfil obtenido exitosamente")
 
 
 @router.get("/")
@@ -27,9 +27,9 @@ def list_users(
     current_user=Depends(require_permission("view_all_users")),
     db: Session = Depends(get_db)
 ):
-    """List all users (requires view_all_users permission)"""
+    """Listar todos los usuarios (requiere permiso view_all_users)"""
     users = db.query(User).all()
-    return ResponseFormatter.success(users, "Users listed successfully")
+    return ResponseFormatter.success(users, "Usuarios listados exitosamente")
 
 
 @router.post("/")
@@ -43,18 +43,18 @@ def create_user(
     db: Session = Depends(get_db)
 ):
     """
-    Create a new user.
+    Crear un nuevo usuario.
     
-    **Requires create_user permission.**
+    **Requiere permiso create_user.**
     
-    Password is hashed with **Argon2**.
+    La contraseña se hashea con **Argon2**.
     """
     if db.query(User).filter(User.email == user.email).first():
-        return ResponseFormatter.error("Email already registered")
+        return ResponseFormatter.error("Email ya registrado")
     
     role = db.query(Role).filter(Role.id == user.rol_id).first()
     if not role:
-        return ResponseFormatter.error("Role not found")
+        return ResponseFormatter.error("Rol no encontrado")
     
     hashed_password = get_password_hash(user.password)
     new_pasusuario = PasUsuario(hashed_password=hashed_password)
@@ -72,7 +72,7 @@ def create_user(
     db.commit()
     db.refresh(new_user)
     
-    return ResponseFormatter.success(new_user, "User created successfully with Argon2")
+    return ResponseFormatter.success(new_user, "Usuario creado exitosamente con Argon2")
 
 
 @router.post("/manager")
@@ -86,18 +86,18 @@ def create_manager(
     db: Session = Depends(get_db)
 ):
     """
-    Create a new manager.
+    Crear un nuevo gerente.
     
-    **Requires create_manager permission.**
+    **Requiere permiso create_manager.**
     
-    Password is hashed with **Argon2**.
+    La contraseña se hashea con **Argon2**.
     """
     if db.query(Manager).filter(Manager.email == manager.email).first():
-        return ResponseFormatter.error("Email already registered for manager")
+        return ResponseFormatter.error("Email ya registrado para gerente")
     
     admin = db.query(Admin).filter(Admin.id == manager.admin_id).first()
     if not admin:
-        return ResponseFormatter.error("Admin not found")
+        return ResponseFormatter.error("Administrador no encontrado")
     
     hashed_password = get_password_hash(manager.password)
     new_pasgerente = PasGerente(hashed_password=hashed_password)
@@ -119,4 +119,4 @@ def create_manager(
     db.commit()
     db.refresh(new_manager)
     
-    return ResponseFormatter.success(new_manager, "Manager created successfully with Argon2")
+    return ResponseFormatter.success(new_manager, "Gerente creado exitosamente con Argon2")

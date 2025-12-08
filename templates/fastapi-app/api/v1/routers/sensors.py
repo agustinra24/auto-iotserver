@@ -1,6 +1,6 @@
 """
-Sensors Router - IoT Sensor Data Management
-Endpoints for receiving and querying sensor readings (MongoDB)
+Router de Sensores - Gestión de Datos de Sensores IoT
+Endpoints para recibir y consultar lecturas de sensores (MongoDB)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -31,37 +31,37 @@ def send_sensor_readings(
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Endpoint for IoT devices to send sensor readings.
+    Endpoint para que dispositivos IoT envíen lecturas de sensores.
     
-    **Authentication required:** Device JWT (POST /device/login)
+    **Autenticación requerida:** JWT de dispositivo (POST /device/login)
     
-    **Process:**
-    1. Validates device_id from body matches token
-    2. Normalizes readings (1 document per sensor type)
-    3. Inserts into MongoDB 'sensor_readings' collection
+    **Proceso:**
+    1. Valida que device_id del body coincida con el token
+    2. Normaliza lecturas (1 documento por tipo de sensor)
+    3. Inserta en colección 'sensor_readings' de MongoDB
     
-    **Normalization:**
-    - temperature → document type "temperature"
-    - smoke_level → document type "smoke_level"
-    - battery → document type "battery"
+    **Normalización:**
+    - temperature → documento tipo "temperature"
+    - smoke_level → documento tipo "smoke_level"
+    - battery → documento tipo "battery"
     """
     
     if reading.device_id != current_device.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Not authorized: token device_id ({current_device.id}) "
-                   f"doesn't match body device_id ({reading.device_id})"
+            detail=f"No autorizado: device_id del token ({current_device.id}) "
+                   f"no coincide con device_id del body ({reading.device_id})"
         )
     
     if reading.temperature is None and reading.smoke_level is None and reading.battery is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Must send at least one sensor reading (temperature, smoke_level or battery)"
+            detail="Debe enviar al menos una lectura de sensor (temperature, smoke_level o battery)"
         )
     
     timestamp = reading.timestamp or datetime.utcnow()
     
-    # Normalize to individual documents
+    # Normalizar a documentos individuales
     documents = []
     
     if reading.temperature is not None:
@@ -101,12 +101,12 @@ def send_sensor_readings(
         inserted_ids = [str(oid) for oid in result.inserted_ids]
         
         logger.info(
-            f"📊 Device {reading.device_id} sent {len(documents)} readings. "
+            f"Dispositivo {reading.device_id} envio {len(documents)} lecturas. "
             f"IDs: {inserted_ids[:3]}..."
         )
         
         return SensorReadingResponse(
-            message="Readings received and saved successfully",
+            message="Lecturas recibidas y guardadas exitosamente",
             readings_count=len(documents),
             device_id=reading.device_id,
             inserted_ids=inserted_ids,
@@ -114,10 +114,10 @@ def send_sensor_readings(
         )
         
     except Exception as e:
-        logger.error(f"❌ Error inserting readings to MongoDB: {e}")
+        logger.error(f"Error al insertar lecturas en MongoDB: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error saving readings: {str(e)}"
+            detail=f"Error al guardar lecturas: {str(e)}"
         )
 
 
@@ -132,22 +132,22 @@ def get_device_readings(
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Query device sensor readings history.
+    Consultar historial de lecturas de sensores de un dispositivo.
     
-    **Authentication required:** User/Admin/Manager JWT
+    **Autenticación requerida:** JWT de Usuario/Admin/Gerente
     
-    **Query Parameters:**
-    - sensor_type: Filter by type (temperature, smoke_level, battery)
-    - start_date: Start date (ISO 8601)
-    - end_date: End date (ISO 8601)
-    - limit: Max records (default: 100, max: 1000)
+    **Parámetros de consulta:**
+    - sensor_type: Filtrar por tipo (temperature, smoke_level, battery)
+    - start_date: Fecha de inicio (ISO 8601)
+    - end_date: Fecha de fin (ISO 8601)
+    - limit: Máximo de registros (default: 100, max: 1000)
     """
     
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Device with ID {device_id} not found"
+            detail=f"Dispositivo con ID {device_id} no encontrado"
         )
     
     if limit > 1000:
@@ -160,7 +160,7 @@ def get_device_readings(
         if sensor_type not in valid_types:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"sensor_type must be one of: {', '.join(valid_types)}"
+                detail=f"sensor_type debe ser uno de: {', '.join(valid_types)}"
             )
         query_filter["sensor_type"] = sensor_type
     
@@ -187,8 +187,8 @@ def get_device_readings(
             ))
         
         logger.info(
-            f"📊 User {current_user.id} queried {len(readings)} readings "
-            f"for device {device_id}"
+            f"Usuario {current_user.id} consulto {len(readings)} lecturas "
+            f"para dispositivo {device_id}"
         )
         
         return SensorReadingsHistoryResponse(
@@ -198,8 +198,8 @@ def get_device_readings(
         )
         
     except Exception as e:
-        logger.error(f"❌ Error querying readings from MongoDB: {e}")
+        logger.error(f"Error al consultar lecturas en MongoDB: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error querying readings: {str(e)}"
+            detail=f"Error al consultar lecturas: {str(e)}"
         )

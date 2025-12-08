@@ -1,8 +1,8 @@
 # =============================================================================
-# Nginx Site Configuration - IoT API
+# Configuración de Sitio Nginx - API IoT
 # =============================================================================
 
-# Rate limiting zones
+# Zonas de limitación de tasa
 limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
 limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=5r/m;
 
@@ -18,7 +18,7 @@ server {
     server_name _;
     client_max_body_size 10M;
     
-    # Timeouts
+    # Tiempos de espera
     client_body_timeout 12;
     client_header_timeout 12;
     send_timeout 10;
@@ -27,13 +27,13 @@ server {
     access_log /var/log/nginx/iot-api-access.log combined;
     error_log /var/log/nginx/iot-api-error.log warn;
     
-    # Security Headers
+    # Encabezados de Seguridad
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     
-    # Root location
+    # Ubicación raíz
     location / {
         limit_req zone=api_limit burst=20 nodelay;
         
@@ -56,7 +56,7 @@ server {
         proxy_buffers 8 4k;
     }
     
-    # Health checks (no rate limiting)
+    # Verificaciones de salud (sin limitación de tasa)
     location ~ ^/health {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -67,7 +67,7 @@ server {
         access_log /var/log/nginx/iot-api-health.log;
     }
     
-    # Auth endpoints (stricter rate limiting)
+    # Endpoints de autenticación (limitación de tasa más estricta)
     location ~ ^/api/v1/auth/(login|logout) {
         limit_req zone=auth_limit burst=5 nodelay;
         
@@ -81,7 +81,7 @@ server {
         proxy_set_header Connection "";
     }
     
-    # API endpoints
+    # Endpoints de API
     location /api/ {
         limit_req zone=api_limit burst=10 nodelay;
         
@@ -96,7 +96,7 @@ server {
         proxy_set_header Connection "";
     }
     
-    # Block sensitive files
+    # Bloquear archivos sensibles
     location ~ /\. {
         deny all;
         access_log off;
@@ -111,7 +111,7 @@ server {
         return 404;
     }
     
-    # Nginx status (internal only)
+    # Estado de Nginx (solo interno)
     location /nginx_status {
         stub_status on;
         access_log off;

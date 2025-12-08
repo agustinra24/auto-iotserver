@@ -1,5 +1,5 @@
 """
-Session logging to CSV - Thread-safe for multiple workers
+Registro de sesiones a CSV - Thread-safe para múltiples workers
 """
 import csv
 import os
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class SessionLogger:
-    """Session event logging to CSV file"""
+    """Registro de eventos de sesión a archivo CSV"""
     
     _lock = threading.Lock()
     _csv_path = None
@@ -26,7 +26,7 @@ class SessionLogger:
     
     @classmethod
     def _get_csv_path(cls) -> Path:
-        """Get CSV file path"""
+        """Obtener ruta del archivo CSV"""
         if cls._csv_path is None:
             logs_base = Path(os.getenv("LOGS_DIR", "logs"))
             logs_dir = logs_base / "sessions"
@@ -36,7 +36,7 @@ class SessionLogger:
     
     @classmethod
     def _ensure_headers(cls, csv_path: Path) -> None:
-        """Ensure CSV has headers"""
+        """Asegurar que el CSV tiene encabezados"""
         if not csv_path.exists() or csv_path.stat().st_size == 0:
             with open(csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=cls.HEADERS)
@@ -44,7 +44,7 @@ class SessionLogger:
     
     @classmethod
     def _write_event(cls, event_data: dict) -> None:
-        """Write event to CSV (thread-safe)"""
+        """Escribir evento al CSV (thread-safe)"""
         csv_path = cls._get_csv_path()
         
         with cls._lock:
@@ -54,13 +54,13 @@ class SessionLogger:
                     writer = csv.DictWriter(f, fieldnames=cls.HEADERS)
                     writer.writerow(event_data)
             except Exception as e:
-                logger.error(f"Error writing to session CSV: {e}")
+                logger.error(f"Error al escribir en CSV de sesiones: {e}")
     
     @classmethod
     def log_login(cls, user_id: int, user_type: str, email: str, jti: str,
                   ip: Optional[str] = None, user_agent: Optional[str] = None,
                   expires_at: Optional[str] = None) -> None:
-        """Log successful login"""
+        """Registrar inicio de sesión exitoso"""
         event_data = {
             "timestamp": datetime.utcnow().isoformat(),
             "event": "login",
@@ -75,13 +75,13 @@ class SessionLogger:
             "endpoint": ""
         }
         cls._write_event(event_data)
-        logger.info(f"Login logged: {user_type} ID {user_id} from {ip}")
+        logger.info(f"Login registrado: {user_type} ID {user_id} desde {ip}")
     
     @classmethod
     def log_login_rejected(cls, user_id: int, user_type: str, email: str,
                            ip: Optional[str] = None, user_agent: Optional[str] = None,
                            reason: str = "session_active") -> None:
-        """Log rejected login attempt"""
+        """Registrar intento de inicio de sesión rechazado"""
         event_data = {
             "timestamp": datetime.utcnow().isoformat(),
             "event": "login_rejected",
@@ -96,12 +96,12 @@ class SessionLogger:
             "endpoint": ""
         }
         cls._write_event(event_data)
-        logger.warning(f"Login rejected: {user_type} ID {user_id} - {reason}")
+        logger.warning(f"Login rechazado: {user_type} ID {user_id} - {reason}")
     
     @classmethod
     def log_logout(cls, user_id: int, user_type: str, jti: str,
                    ip: Optional[str] = None, reason: str = "manual") -> None:
-        """Log logout"""
+        """Registrar cierre de sesión"""
         event_data = {
             "timestamp": datetime.utcnow().isoformat(),
             "event": "logout",
@@ -116,4 +116,4 @@ class SessionLogger:
             "endpoint": ""
         }
         cls._write_event(event_data)
-        logger.info(f"Logout logged: {user_type} ID {user_id}")
+        logger.info(f"Logout registrado: {user_type} ID {user_id}")

@@ -1,4 +1,4 @@
-"""API Dependencies - Authentication and Authorization"""
+"""Dependencias de API - Autenticación y Autorización"""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
@@ -20,13 +20,13 @@ def get_current_user_or_device(
     db: Session = Depends(get_db)
 ):
     """
-    Validate JWT token and verify active session in Redis.
-    Returns dict with 'type' and 'data' keys.
+    Validar token JWT y verificar sesión activa en Redis.
+    Retorna dict con claves 'type' y 'data'.
     """
     token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
@@ -41,10 +41,10 @@ def get_current_user_or_device(
         if not jti:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token not compatible with session system. Login again."
+                detail="Token no compatible con sistema de sesiones. Inicia sesión nuevamente."
             )
         
-        # Determine user_id for session validation
+        # Determinar user_id para validación de sesión
         if token_type == "device":
             user_id_for_session = int(sub) if sub is not None else None
         else:
@@ -53,19 +53,19 @@ def get_current_user_or_device(
         if user_id_for_session is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or incomplete token",
+                detail="Token inválido o incompleto",
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        # Verify session in Redis
+        # Verificar sesión en Redis
         if not SessionService.verify_token_session(user_id_for_session, token_type, jti):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or closed session. Login again.",
+                detail="Sesión inválida o cerrada. Inicia sesión nuevamente.",
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        # Get entity based on type
+        # Obtener entidad según tipo
         if token_type == "user":
             user = db.query(User).filter(User.email == sub).first()
             if not user or not user.is_active:
@@ -108,40 +108,40 @@ def get_current_user_or_device(
 
 
 def get_current_user(credentials=Depends(security), db: Session = Depends(get_db)):
-    """Get current authenticated user"""
+    """Obtener usuario autenticado actual"""
     result = get_current_user_or_device(credentials=credentials, db=db)
     if result["type"] != "user":
-        raise HTTPException(status_code=403, detail="Only users can access")
+        raise HTTPException(status_code=403, detail="Solo usuarios pueden acceder")
     return result["data"]
 
 
 def get_current_device(credentials=Depends(security), db: Session = Depends(get_db)):
-    """Get current authenticated device"""
+    """Obtener dispositivo autenticado actual"""
     result = get_current_user_or_device(credentials=credentials, db=db)
     if result["type"] != "device":
-        raise HTTPException(status_code=403, detail="Only devices can access")
+        raise HTTPException(status_code=403, detail="Solo dispositivos pueden acceder")
     return result["data"]
 
 
 def get_current_admin(credentials=Depends(security), db: Session = Depends(get_db)):
-    """Get current authenticated admin"""
+    """Obtener administrador autenticado actual"""
     result = get_current_user_or_device(credentials=credentials, db=db)
     if result["type"] != "admin":
-        raise HTTPException(status_code=403, detail="Only admins can access")
+        raise HTTPException(status_code=403, detail="Solo administradores pueden acceder")
     return result["data"]
 
 
 def require_role(role_name: str):
-    """Require specific role"""
+    """Requerir rol específico"""
     def role_checker(current_user=Depends(get_current_user)):
         if not current_user.rol or current_user.rol.nombre != role_name:
-            raise HTTPException(status_code=403, detail=f"Required role: {role_name}")
+            raise HTTPException(status_code=403, detail=f"Rol requerido: {role_name}")
         return current_user
     return role_checker
 
 
 def require_permission(permission_name: str):
-    """Require specific permission"""
+    """Requerir permiso específico"""
     def permission_checker(
         principal=Depends(get_current_user_or_device),
         db: Session = Depends(get_db)
@@ -150,11 +150,11 @@ def require_permission(permission_name: str):
         principal_obj = principal["data"]
         
         if principal_type == "device":
-            raise HTTPException(status_code=403, detail="Not authorized (devices cannot access)")
+            raise HTTPException(status_code=403, detail="No autorizado (los dispositivos no pueden acceder)")
         
         rol_id = getattr(principal_obj, "rol_id", None)
         if not rol_id:
-            raise HTTPException(status_code=403, detail="No role assigned")
+            raise HTTPException(status_code=403, detail="Sin rol asignado")
         
         has_perm = (
             db.query(Permission)
@@ -164,7 +164,7 @@ def require_permission(permission_name: str):
         )
         
         if not has_perm:
-            raise HTTPException(status_code=403, detail=f"Required permission: {permission_name}")
+            raise HTTPException(status_code=403, detail=f"Permiso requerido: {permission_name}")
         
         return principal_obj
     

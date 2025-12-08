@@ -1,5 +1,5 @@
 """
-Alerts Router - Placeholder for future implementation
+Router de Alertas - Placeholder para implementación futura
 """
 from fastapi import APIRouter
 
@@ -9,20 +9,20 @@ router = APIRouter(tags=["Alerts"])
 @router.get("/")
 def list_alerts():
     """
-    List alerts - To be implemented.
+    Listar alertas - Por implementar.
     
-    Future functionality:
-    - Query alerts from MongoDB
-    - Filter by device, severity, date range
-    - Mark alerts as resolved
+    Funcionalidad futura:
+    - Consultar alertas de MongoDB
+    - Filtrar por dispositivo, severidad, rango de fechas
+    - Marcar alertas como resueltas
     """
     return {
-        "message": "Alerts endpoint placeholder",
-        "status": "not_implemented",
+        "message": "Placeholder de endpoint de alertas",
+        "status": "no_implementado",
         "future_features": [
-            "List alerts by device",
-            "Filter by severity",
-            "Mark as resolved",
-            "Alert history"
+            "Listar alertas por dispositivo",
+            "Filtrar por severidad",
+            "Marcar como resuelta",
+            "Historial de alertas"
         ]
     }

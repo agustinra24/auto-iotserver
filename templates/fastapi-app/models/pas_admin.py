@@ -1,4 +1,4 @@
-"""Admin Password Table"""
+"""Tabla de Contraseña de Administrador"""
 from sqlalchemy import Column, Integer, String, LargeBinary
 from sqlalchemy.orm import relationship
 from database import Base

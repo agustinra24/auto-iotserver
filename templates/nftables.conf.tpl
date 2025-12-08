@@ -7,7 +7,7 @@ define HTTP_PORT = 80
 define HTTPS_PORT = 443
 
 table inet filter {
-    # Dynamic IP sets for fail2ban and rate limiting
+    # Conjuntos dinámicos de IP para fail2ban y limitación de tasa
     set fail2ban_blacklist {
         type ipv4_addr
         flags dynamic, timeout
@@ -32,41 +32,41 @@ table inet filter {
     chain input {
         type filter hook input priority filter; policy drop;
         
-        # Allow loopback
+        # Permitir loopback
         iif lo accept
         
-        # Allow established/related connections
+        # Permitir conexiones establecidas/relacionadas
         ct state established,related accept
         
-        # Drop invalid packets
+        # Descartar paquetes inválidos
         ct state invalid drop
         
-        # Fail2Ban blacklist (highest priority)
+        # Lista negra de Fail2Ban (máxima prioridad)
         ip saddr @fail2ban_blacklist drop
         
-        # SSH with rate limiting (3 connections per minute per IP)
+        # SSH con limitación de tasa (3 conexiones por minuto por IP)
         tcp dport $SSH_PORT ct state new \
             add @rate_limit_ssh { ip saddr limit rate 3/minute burst 3 packets } \
             accept
         
-        # HTTP/HTTPS with rate limiting
+        # HTTP/HTTPS con limitación de tasa
         tcp dport $HTTP_PORT ct state new limit rate 10/second burst 10 packets accept
         tcp dport $HTTPS_PORT ct state new limit rate 10/second burst 10 packets accept
         
-        # ICMP (ping) - limited
+        # ICMP (ping) - limitado
         icmp type echo-request limit rate 5/second accept
         
-        # Log dropped packets (optional, comment out in production)
+        # Registrar paquetes descartados (opcional, comentar en producción)
         # log prefix "nftables-drop: " drop
     }
     
     chain forward {
         type filter hook forward priority filter; policy accept;
         
-        # Allow established/related
+        # Permitir establecidas/relacionadas
         ct state established,related accept
         
-        # Allow Docker networks
+        # Permitir redes Docker
         iifname "docker0" accept
         iifname "br-*" accept
     }

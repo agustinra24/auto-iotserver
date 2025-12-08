@@ -1,4 +1,4 @@
-"""Validation decorators"""
+"""Decoradores de validación"""
 from functools import wraps
 from fastapi import HTTPException, status
 from core.validators import Validators
@@ -6,7 +6,7 @@ import time
 
 
 def validate_email_decorator(func):
-    """Validate email format"""
+    """Validar formato de email"""
     @wraps(func)
     async def wrapper(*args, **kwargs):
         for arg_name, arg_value in kwargs.items():
@@ -14,7 +14,7 @@ def validate_email_decorator(func):
                 if not Validators.validate_email(arg_value.email):
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Invalid email format"
+                        detail="Formato de email inválido"
                     )
                 break
         return await func(*args, **kwargs)
@@ -22,7 +22,7 @@ def validate_email_decorator(func):
 
 
 def validate_password_decorator(func):
-    """Validate password strength"""
+    """Validar fortaleza de contraseña"""
     @wraps(func)
     async def wrapper(*args, **kwargs):
         for arg_name, arg_value in kwargs.items():
@@ -30,7 +30,7 @@ def validate_password_decorator(func):
                 if not Validators.validate_password_strength(arg_value.password):
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Password must have at least 8 chars, one uppercase, one lowercase and one number"
+                        detail="La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número"
                     )
                 break
         return await func(*args, **kwargs)
@@ -38,7 +38,7 @@ def validate_password_decorator(func):
 
 
 def sanitize_input_decorator(func):
-    """Sanitize string inputs"""
+    """Sanitizar entradas de texto"""
     @wraps(func)
     async def wrapper(*args, **kwargs):
         new_kwargs = {}
@@ -57,7 +57,7 @@ def sanitize_input_decorator(func):
 
 
 def async_safe(func):
-    """Make sync functions async compatible"""
+    """Hacer funciones síncronas compatibles con async"""
     @wraps(func)
     async def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -65,7 +65,7 @@ def async_safe(func):
 
 
 def rate_limit(max_requests: int = 100, time_window: int = 3600):
-    """Simple rate limiting decorator"""
+    """Decorador simple de limitación de tasa"""
     def decorator(func):
         request_times = []
         
@@ -77,7 +77,7 @@ def rate_limit(max_requests: int = 100, time_window: int = 3600):
             if len(request_times) >= max_requests:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Too many requests. Try again later."
+                    detail="Demasiadas solicitudes. Intenta de nuevo más tarde."
                 )
             
             request_times.append(current_time)

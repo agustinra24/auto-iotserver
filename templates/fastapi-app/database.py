@@ -1,16 +1,16 @@
 """
-Database Configuration
-Handles MySQL connection with SQLAlchemy
+Configuración de Base de Datos
+Maneja conexión MySQL con SQLAlchemy
 """
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Get database URL from environment
+# Obtener URL de base de datos del entorno
 DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://iot_user:password@mysql:3306/iot_platform")
 
-# Create engine
+# Crear engine
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
@@ -19,15 +19,15 @@ engine = create_engine(
     max_overflow=10
 )
 
-# Session factory
+# Fábrica de sesiones
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Base class for models
+# Clase base para modelos
 Base = declarative_base()
 
-# Dependency for FastAPI
+# Dependencia para FastAPI
 def get_db():
-    """Database session dependency"""
+    """Dependencia de sesión de base de datos"""
     db = SessionLocal()
     try:
         yield db

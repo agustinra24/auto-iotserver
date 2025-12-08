@@ -1,23 +1,23 @@
-"""Device Schemas"""
+"""Schemas de Dispositivo"""
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
 
 class DeviceBase(BaseModel):
-    """Base device schema"""
+    """Schema base de dispositivo"""
     nombre: str
     device_type: str
     is_active: bool = True
 
 
 class DeviceCreate(DeviceBase):
-    """Schema for creating devices"""
+    """Schema para crear dispositivos"""
     admin_id: int
 
 
 class DeviceResponse(DeviceBase):
-    """Schema for device responses"""
+    """Schema para respuestas de dispositivo"""
     id: int
     admin_id: Optional[int] = None
     created_at: datetime
@@ -27,7 +27,7 @@ class DeviceResponse(DeviceBase):
 
 
 class DeviceUpdate(BaseModel):
-    """Schema for updating devices"""
+    """Schema para actualizar dispositivos"""
     nombre: Optional[str] = None
     device_type: Optional[str] = None
     is_active: Optional[bool] = None

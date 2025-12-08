@@ -1,22 +1,22 @@
-"""Sensor Data Schemas for MongoDB"""
+"""Schemas de Datos de Sensores para MongoDB"""
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
 
 
 class SensorReading(BaseModel):
-    """Schema for receiving sensor readings from IoT devices"""
-    device_id: int = Field(..., description="Device ID sending the readings")
-    temperature: Optional[float] = Field(None, description="Temperature in Celsius")
-    smoke_level: Optional[int] = Field(None, ge=0, le=100, description="Smoke level (0-100%)")
-    battery: Optional[int] = Field(None, ge=0, le=100, description="Battery level (0-100%)")
-    location: Optional[str] = Field(None, max_length=200, description="Device location")
+    """Schema para recibir lecturas de sensores de dispositivos IoT"""
+    device_id: int = Field(..., description="ID del dispositivo que envía las lecturas")
+    temperature: Optional[float] = Field(None, description="Temperatura en Celsius")
+    smoke_level: Optional[int] = Field(None, ge=0, le=100, description="Nivel de humo (0-100%)")
+    battery: Optional[int] = Field(None, ge=0, le=100, description="Nivel de batería (0-100%)")
+    location: Optional[str] = Field(None, max_length=200, description="Ubicación del dispositivo")
     timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
     
     @validator('temperature')
     def validate_temperature(cls, v):
         if v is not None and (v < -50 or v > 100):
-            raise ValueError('Temperature out of valid range (-50 to 100°C)')
+            raise ValueError('Temperatura fuera del rango válido (-50 a 100°C)')
         return v
     
     class Config:
@@ -33,7 +33,7 @@ class SensorReading(BaseModel):
 
 
 class SensorReadingResponse(BaseModel):
-    """Response after inserting readings"""
+    """Respuesta después de insertar lecturas"""
     message: str
     readings_count: int
     device_id: int
@@ -42,7 +42,7 @@ class SensorReadingResponse(BaseModel):
 
 
 class SensorReadingItem(BaseModel):
-    """Individual reading item"""
+    """Elemento de lectura individual"""
     sensor_type: str
     value: float
     unit: str
@@ -51,7 +51,7 @@ class SensorReadingItem(BaseModel):
 
 
 class SensorReadingsHistoryResponse(BaseModel):
-    """Response for historical queries"""
+    """Respuesta para consultas históricas"""
     device_id: int
     readings_count: int
     readings: List[SensorReadingItem]

@@ -1,4 +1,4 @@
-"""Role Model"""
+"""Modelo de Rol"""
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 from database import Base
@@ -12,7 +12,7 @@ class Role(Base):
     nombre = Column(String(50), unique=True, nullable=False)
     description = Column(String(255), nullable=True)
     
-    # Relationships
+    # Relaciones
     permissions = relationship(
         "Permission",
         secondary=rol_permiso,

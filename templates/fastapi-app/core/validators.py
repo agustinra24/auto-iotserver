@@ -1,20 +1,20 @@
-"""Reusable validators with regex"""
+"""Validadores reutilizables con regex"""
 import re
 import html
 
 
 class Validators:
-    """Reusable validators"""
+    """Validadores reutilizables"""
     
     @staticmethod
     def validate_email(email: str) -> bool:
-        """Validate email format"""
+        """Validar formato de email"""
         pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         return bool(re.match(pattern, email))
     
     @staticmethod
     def validate_password_strength(password: str) -> bool:
-        """Validate password strength"""
+        """Validar fortaleza de contraseña"""
         if len(password) < 8:
             return False
         if not re.search(r'[A-Z]', password):
@@ -27,12 +27,12 @@ class Validators:
     
     @staticmethod
     def validate_api_key(api_key: str) -> bool:
-        """Validate API key format"""
+        """Validar formato de API key"""
         return len(api_key) >= 10 and api_key.isalnum()
     
     @staticmethod
     def sanitize_input(text: str, max_length: int = 255) -> str:
-        """Sanitize input removing HTML/JS"""
+        """Sanitizar entrada removiendo HTML/JS"""
         text = re.sub(r'<[^>]*>', '', text)
         text = html.escape(text)
         return text[:max_length]

@@ -24,13 +24,13 @@ http {
     types_hash_max_size 2048;
     client_max_body_size 10M;
 
-    # Gzip compression
+    # Compresión Gzip
     gzip on;
     gzip_vary on;
     gzip_proxied any;
     gzip_comp_level 6;
     gzip_types text/plain text/css text/xml text/javascript application/json application/javascript application/xml+rss;
 
-    # Include site configurations
+    # Incluir configuraciones de sitios
     include /etc/nginx/conf.d/*.conf;
 }

@@ -1,4 +1,4 @@
-"""App Model"""
+"""Modelo de Aplicación"""
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -16,6 +16,6 @@ class App(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     admin_id = Column(Integer, ForeignKey("admin.id"), nullable=True)
     
-    # Relationships
+    # Relaciones
     admin = relationship("Admin", back_populates="apps")
     servicios = relationship("Service", secondary="servicio_app", back_populates="apps")

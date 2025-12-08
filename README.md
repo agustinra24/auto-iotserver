@@ -98,7 +98,7 @@ sudo ./install.sh
 
 ```bash
 POST /api/v1/auth/login/user
-Body: {"email": "user@fire.com", "password": "User123!"}
+Body: {"email": "user@fire.com", "password": "password123"}
 Response: {"access_token": "...", "user_id": 1, "role": "user"}
 TTL: 60 minutos
 ```
@@ -107,7 +107,7 @@ TTL: 60 minutos
 
 ```bash
 POST /api/v1/auth/login/admin
-Body: {"email": "master@fire.com", "password": "Admin123!"}
+Body: {"email": "master@fire.com", "password": "password123"}
 Response: {"access_token": "...", "admin_id": 1, "role": "admin_master"}
 TTL: 60 minutos
 ```
@@ -116,7 +116,7 @@ TTL: 60 minutos
 
 ```bash
 POST /api/v1/auth/login/manager
-Body: {"email": "gerente@fire.com", "password": "Manager123!"}
+Body: {"email": "gerente@fire.com", "password": "password123"}
 Response: {"access_token": "...", "manager_id": 1, "role": "manager"}
 TTL: 60 minutos
 ```
@@ -449,7 +449,7 @@ curl http://localhost/health
 ```bash
 curl -X POST http://localhost/api/v1/auth/login/admin \
   -H "Content-Type: application/json" \
-  -d '{"email":"master@fire.com","password":"Admin123!"}'
+  -d '{"email":"master@fire.com","password":"password123"}'
 # Esperado: {"access_token":"...","admin_id":1,"role":"admin_master"}
 ```
 
@@ -459,7 +459,7 @@ curl -X POST http://localhost/api/v1/auth/login/admin \
 # Segundo intento de login (deberia fallar)
 curl -X POST http://localhost/api/v1/auth/login/admin \
   -H "Content-Type: application/json" \
-  -d '{"email":"master@fire.com","password":"Admin123!"}'
+  -d '{"email":"master@fire.com","password":"password123"}'
 # Esperado: {"detail":"Active session exists..."}
 ```
 
@@ -546,7 +546,7 @@ nc -zv localhost 27017  # MongoDB
 python3 -c "
 from passlib.context import CryptContext
 ctx = CryptContext(schemes=['argon2'])
-print(ctx.hash('Admin123!'))
+print(ctx.hash('password123'))
 "
 # Actualizar en MySQL
 ```
@@ -622,9 +622,9 @@ curl -X POST "http://localhost/api/v1/auth/device/init-encryption-key?device_id=
 
 |Entidad|Email|Contrasena|
 |---|---|---|
-|Admin Master|master@fire.com|Admin123!|
-|Gerente|gerente@fire.com|Manager123!|
-|Usuario|user@fire.com|User123!|
+|Admin Master|master@fire.com|password123|
+|Gerente|gerente@fire.com|password123|
+|Usuario|user@fire.com|password123|
 |Dispositivo|sensor-test-001|API Key: TEST_DEVICE_API_KEY_32_CHARS_XX|
 
 ---

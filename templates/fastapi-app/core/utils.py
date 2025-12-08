@@ -1,4 +1,4 @@
-"""Utility functions"""
+"""Funciones utilitarias"""
 import uuid
 from datetime import datetime
 from typing import Any, Dict
@@ -13,10 +13,10 @@ def current_timestamp():
 
 
 class ResponseFormatter:
-    """Consistent response formatting"""
+    """Formato de respuesta consistente"""
     
     @staticmethod
-    def success(data: Any = None, message: str = "Operation successful") -> Dict:
+    def success(data: Any = None, message: str = "Operación exitosa") -> Dict:
         return {
             "success": True,
             "message": message,
@@ -25,7 +25,7 @@ class ResponseFormatter:
         }
     
     @staticmethod
-    def error(message: str = "Operation error", details: Any = None) -> Dict:
+    def error(message: str = "Error en operación", details: Any = None) -> Dict:
         return {
             "success": False,
             "message": message,

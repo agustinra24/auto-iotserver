@@ -78,6 +78,7 @@ Ninguna base de datos acepta conexiones desde el host o internet, eliminando vec
 - Conexión a internet estable
 - Acceso SSH con privilegios sudo
 - Dependencias mínimas instaladas:
+
   ```bash
   sudo apt-get update
   sudo apt-get install -y git curl openssl bc

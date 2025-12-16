@@ -77,7 +77,12 @@ Ninguna base de datos acepta conexiones desde el host o internet, eliminando vec
 - 20 GB de almacenamiento disponible
 - Conexión a internet estable
 - Acceso SSH con privilegios sudo
-- Git instalado (`sudo apt-get install git`)
+- Dependencias mínimas instaladas:
+  ```bash
+  sudo apt-get update
+  sudo apt-get install -y git curl openssl bc
+  ```
+
 
 ### Recomendaciones
 
@@ -91,11 +96,11 @@ Ninguna base de datos acepta conexiones desde el host o internet, eliminando vec
 
 ### Clonar el Repositorio
 
-Conectar al servidor vía SSH e instalar Git si no está disponible:
+Conectar al servidor vía SSH e instalar las dependencias necesarias:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git
+sudo apt-get install -y git curl openssl bc
 ```
 
 Clonar el repositorio del instalador:
@@ -104,6 +109,7 @@ Clonar el repositorio del instalador:
 git clone https://github.com/agustinra24/auto-iotserver
 cd auto-iotserver
 ```
+Nota: El instalador verifica automáticamente estas dependencias al iniciar.
 
 ### Asignar Permisos de Ejecución
 

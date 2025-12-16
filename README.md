@@ -1,4 +1,3 @@
-```markdown
 # Plataforma IoT para Prevención de Incendios
 
 **Versión 1.0** | Instalador Automatizado para Debian 13
@@ -639,12 +638,6 @@ sudo docker logs iot-mysql --tail=100
 
 # MongoDB
 sudo docker logs iot-mongodb --tail=100
-```
-
-Para reportar problemas o solicitar funcionalidades, usar el sistema de Issues del repositorio:
-
-```
-https://github.com/agustinra24/auto-iotserver
 ```
 
 ---

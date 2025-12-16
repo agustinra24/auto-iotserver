@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Plataforma IoT de Prevención de Incendios - Instalador Automatizado v4
+# Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1
 #
 # Requisitos: Debian 13 (Trixie) limpio, acceso root/sudo
 # Ejecución: sudo ./install.sh [--dry-run] [--resume]
@@ -115,7 +115,7 @@ parse_arguments() {
 ################################################################################
 show_help() {
     cat << EOF
-Plataforma IoT de Prevención de Incendios - Instalador Automatizado v4
+Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1
 
 USO:
     sudo ./install.sh [OPCIONES]
@@ -147,7 +147,7 @@ show_welcome() {
     
     echo -e "
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
-${BOLD}              SISTEMA DE INSTALACIÓN AUTOMATIZADO v4                   ${RESET}
+${BOLD}              SISTEMA DE INSTALACIÓN AUTOMATIZADO v1                   ${RESET}
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
 
 ${YELLOW}ADVERTENCIA - LEE CUIDADOSAMENTE${RESET}

@@ -221,17 +221,12 @@ ${CYAN}[Fase 12]${RESET} Pruebas y Validación
   • Probar endpoints de autenticación
   • Validar aislamiento de base de datos
 
-${CYAN}[Fase 13]${RESET} Limpieza Final ${RED}(NUEVO EN v4)${RESET}
+${CYAN}[Fase 13]${RESET} Limpieza Final ${RED}${RESET}
   • Eliminar usuario debian
   • Limpiar archivos temporales
   • Verificación final del sistema
 
-${BOLD}Tiempo Total Estimado:${RESET} ~3 horas 15 minutos
-
-${BOLD}Mejoras en v4:${RESET}
-  • ${GREEN}✓${RESET} Instalación completamente automática (sin cambio de terminal)
-  • ${GREEN}✓${RESET} Usuario debian eliminado al final (safety net)
-  • ${GREEN}✓${RESET} Cálculo de duración corregido
+${BOLD}Tiempo Total Estimado:${RESET} ~15 minutos
 
 ${BOLD}Secretos Generados:${RESET}
   Todas las contraseñas y claves serán auto-generadas y guardadas en:

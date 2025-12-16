@@ -649,5 +649,5 @@ sudo docker logs iot-mongodb --tail=100
 
 ---
 
-**Versión 1.0** | Diciembre 2025 
+**Versión 1.0** | Diciembre 2025
 Sistema de Prevención de Incendios basado en IoT

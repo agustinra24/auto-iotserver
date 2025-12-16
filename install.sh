@@ -628,8 +628,6 @@ ${WHITE}+-------------------------------------------------------------------+
 +-------------------------------------------------------------------+${RESET}
 
   Log de instalacion:  ${LOG_FILE}
-  Guia completa:       GUIA_DEFINITIVA_2.0_COMPLETA.md
-
 
 ${GREEN}====================================================================${RESET}
 ${BOLD}          Gracias por usar el instalador de Plataforma IoT          ${RESET}

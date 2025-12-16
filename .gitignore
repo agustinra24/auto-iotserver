@@ -6,7 +6,10 @@
 # Archivos de instalación
 .install-state
 .config.env
-logs/
+# Logs - ignorar contenido pero mantener carpeta vacía
+logs/*
+!logs/.gitkeep
+
 *.log
 
 # Secretos

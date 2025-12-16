@@ -4,7 +4,7 @@
 FROM python:3.11-slim
 
 LABEL maintainer="iot-platform"
-LABEL version="2.3"
+LABEL version="1.1"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

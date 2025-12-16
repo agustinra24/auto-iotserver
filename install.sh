@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1
+# Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1.1
 #
 # Requisitos: Debian 13 (Trixie) limpio, acceso root/sudo
 # Ejecución: sudo ./install.sh [--dry-run] [--resume]
@@ -115,7 +115,7 @@ parse_arguments() {
 ################################################################################
 show_help() {
     cat << EOF
-Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1
+Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1.1
 
 USO:
     sudo ./install.sh [OPCIONES]
@@ -147,7 +147,7 @@ show_welcome() {
     
     echo -e "
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
-${BOLD}              SISTEMA DE INSTALACIÓN AUTOMATIZADO v1                   ${RESET}
+${BOLD}              SISTEMA DE INSTALACIÓN AUTOMATIZADO v1.1                   ${RESET}
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
 
 ${YELLOW}ADVERTENCIA - LEE CUIDADOSAMENTE${RESET}
@@ -169,7 +169,7 @@ ${GREEN}LO QUE OBTENDRÁS:${RESET}
   - Plataforma IoT completa con backend FastAPI
   - 4 tipos de autenticación (Usuario, Admin, Gerente, Dispositivo)
   - Autenticación criptográfica de dispositivos (AES-256 + HMAC)
-  - MySQL + Redis activos, MongoDB reservado para futuro
+  - MySQL + Redis activos + MongoDB
   - 5 capas de seguridad (nftables -> Fail2Ban -> Nginx -> FastAPI -> BD)
   - Cero exposición de bases de datos (solo red interna Docker)
 

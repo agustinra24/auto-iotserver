@@ -1,6 +1,6 @@
 # Plataforma IoT para Prevención de Incendios
 
-**Versión 1.0** | Instalador Automatizado para Debian 13
+**V1.1** | Instalador Automatizado para Debian 13
 
 Sistema completo de monitoreo IoT con autenticación criptográfica de dispositivos, gestión de usuarios multi-nivel y almacenamiento distribuido de datos de sensores.
 
@@ -80,8 +80,8 @@ Ninguna base de datos acepta conexiones desde el host o internet, eliminando vec
 - Dependencias mínimas instaladas:
 
   ```bash
-  sudo apt-get update
-  sudo apt-get install -y git curl openssl bc
+  sudo apt update
+  sudo apt install -y git curl openssl bc
   ```
 
 
@@ -100,8 +100,9 @@ Ninguna base de datos acepta conexiones desde el host o internet, eliminando vec
 Conectar al servidor vía SSH e instalar las dependencias necesarias:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y git curl openssl bc
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y git curl openssl bc
 ```
 
 Clonar el repositorio del instalador:
@@ -649,5 +650,5 @@ sudo docker logs iot-mongodb --tail=100
 
 ---
 
-**Versión 1.0** | Diciembre 2025
+**V1.1** | Diciembre 2025
 Sistema de Prevención de Incendios basado en IoT

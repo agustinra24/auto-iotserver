@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="API del Sistema de Prevención de Incendios",
     description="Plataforma IoT con autenticación criptográfica de dispositivos",
-    version="2.3.0",
+    version="1.1",
     lifespan=lifespan
 )
 

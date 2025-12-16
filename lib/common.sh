@@ -9,6 +9,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+WHITE='\033[0;37m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
@@ -65,7 +66,6 @@ error_handler() {
     log_error "Último comando: $BASH_COMMAND"
     log_error "Revisar log: $LOG_FILE"
     
-    # Ofrecer guardar estado
     if [[ -n "${CURRENT_PHASE:-}" ]]; then
         log_warning "Instalación interrumpida en la Fase $CURRENT_PHASE"
         log_info "Puedes reanudar después con: sudo ./install.sh --resume"
@@ -74,21 +74,17 @@ error_handler() {
     exit 1
 }
 
-# Establecer trampa de errores
 trap 'error_handler $LINENO' ERR
 
-# Verificar si el comando existe
 command_exists() {
     command -v "$1" &> /dev/null
 }
 
-# Esperar confirmación del usuario
 wait_for_confirmation() {
     local message="${1:-Presiona ENTER para continuar}"
     read -p "$message: "
 }
 
-# Detectar tipo de usuario actual (root, debian, otro)
 detect_current_user() {
     if [[ $EUID -eq 0 ]]; then
         echo "root"
@@ -99,13 +95,11 @@ detect_current_user() {
     fi
 }
 
-# Verificar si el servicio está ejecutándose
 is_service_running() {
     local service=$1
     systemctl is-active --quiet "$service"
 }
 
-# Respaldar archivo
 backup_file() {
     local file=$1
     if [[ -f "$file" ]]; then
@@ -115,7 +109,6 @@ backup_file() {
     fi
 }
 
-# Reemplazar cadena en archivo
 replace_in_file() {
     local file=$1
     local search=$2
@@ -129,7 +122,6 @@ replace_in_file() {
     sed -i "s|${search}|${replace}|g" "$file"
 }
 
-# Crear directorio con permisos
 create_dir() {
     local dir=$1
     local perms=${2:-755}
@@ -140,7 +132,6 @@ create_dir() {
     chown "$owner" "$dir"
 }
 
-# Descargar archivo con reintentos
 download_file() {
     local url=$1
     local dest=$2
@@ -160,13 +151,11 @@ download_file() {
     return 1
 }
 
-# Verificar disponibilidad del puerto
 is_port_available() {
     local port=$1
     ! ss -tlnp | grep -q ":${port} "
 }
 
-# Obtener información del sistema
 get_system_info() {
     cat << EOF
 SO: $(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)
@@ -177,14 +166,12 @@ Disco: $(df -h / | awk 'NR==2 {print $4}') disponible
 EOF
 }
 
-# Calcular porcentaje de progreso
 calc_progress() {
     local current=$1
     local total=$2
     echo $(( (current * 100) / total ))
 }
 
-# Formatear duración
 format_duration() {
     local seconds=$1
     local hours=$((seconds / 3600))
@@ -193,21 +180,17 @@ format_duration() {
     printf "%02d:%02d:%02d" $hours $minutes $secs
 }
 
-# Verificar recursos del sistema
 check_system_resources() {
-    local min_ram_mb=3072  # 3GB
+    local min_ram_mb=3072
     local min_disk_gb=15
     
-    # Verificar RAM
     local total_ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
     local total_ram_mb=$((total_ram_kb / 1024))
     
     if [[ $total_ram_mb -lt $min_ram_mb ]]; then
         log_warning "RAM baja: ${total_ram_mb}MB (recomendado: ${min_ram_mb}MB)"
-        log_warning "La instalación puede ser lenta o fallar"
     fi
     
-    # Verificar espacio en disco
     local avail_disk_gb=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
     
     if [[ $avail_disk_gb -lt $min_disk_gb ]]; then
@@ -218,28 +201,23 @@ check_system_resources() {
     return 0
 }
 
-# Generar cadena aleatoria
 generate_random_string() {
     local length=${1:-32}
     openssl rand -base64 $length | tr -d "=+/" | cut -c1-$length
 }
 
-# Generar hexadecimal aleatorio
 generate_random_hex() {
     local length=${1:-32}
     openssl rand -hex $length
 }
 
-# Verificar si se ejecuta en Docker
 is_docker() {
     [[ -f /.dockerenv ]] || grep -q docker /proc/1/cgroup 2>/dev/null
 }
 
-# Asegurar que no se ejecuta en Docker
 ensure_not_docker() {
     if is_docker; then
         log_error "Este script no puede ejecutarse dentro de un contenedor Docker"
-        log_error "Por favor ejecuta en el sistema host"
         exit 1
     fi
 }

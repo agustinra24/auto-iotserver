@@ -298,21 +298,21 @@ INSERT INTO `rol_permiso` (`role_id`, `permiso_id`) VALUES
 -- DATOS: Usuarios de Prueba (Contraseñas con Hash Argon2)
 -- =============================================================================
 
--- Admin Master: master@fire.com / password123
+-- Admin Master: {{ADMIN_EMAIL}} / [contraseña personalizada]
 INSERT INTO `pasadmin` (`id`, `hashed_password`, `encryption_key`) VALUES
 (1, '{{ADMIN_PASSWORD_HASH}}', NULL);
 
 INSERT INTO `admin` (`id`, `nombre`, `email`, `rol_id`, `pasadmin_id`) VALUES
-(1, 'Admin Master', 'master@fire.com', 1, 1);
+(1, 'Admin Master', '{{ADMIN_EMAIL}}', 1, 1);
 
--- Manager: gerente@fire.com / password123
+-- Manager: gerente@fire.com / password123 (usuario de prueba)
 INSERT INTO `pasgerente` (`id`, `hashed_password`, `encryption_key`) VALUES
 (1, '{{MANAGER_PASSWORD_HASH}}', NULL);
 
 INSERT INTO `gerente` (`id`, `nombre`, `email`, `admin_id`, `pasgerente_id`, `rol_id`) VALUES
 (1, 'Gerente Principal', 'gerente@fire.com', 1, 1, 4);
 
--- User: user@fire.com / password123
+-- User: user@fire.com / password123 (usuario de prueba)
 INSERT INTO `pasusuario` (`id`, `hashed_password`, `encryption_key`) VALUES
 (1, '{{USER_PASSWORD_HASH}}', NULL);
 

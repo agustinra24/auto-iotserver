@@ -3,26 +3,49 @@
 # lib/secrets.sh - Funciones de generación de secretos (soporte Argon2)
 ################################################################################
 
+# Venv temporal para hashear (evita problemas con pip/PEP668 en Debian modernos)
+ARGON2_VENV_DIR="/tmp/iot-platform-argon2-venv"
+ARGON2_VENV_PY="${ARGON2_VENV_DIR}/bin/python"
+ARGON2_VENV_PIP="${ARGON2_VENV_DIR}/bin/pip"
+
+ensure_argon2_venv() {
+    # Crea el venv solo si no existe.
+    # Requiere python3-venv (se instala en Fase 2).
+    if [[ ! -x "$ARGON2_VENV_PY" ]]; then
+        log_info "Creando venv temporal para hashing Argon2: $ARGON2_VENV_DIR"
+        python3 -m venv "$ARGON2_VENV_DIR"
+        "$ARGON2_VENV_PIP" install -U pip setuptools wheel 2>&1 | tee -a "${LOG_FILE:-/dev/null}"
+        "$ARGON2_VENV_PIP" install argon2-cffi passlib 2>&1 | tee -a "${LOG_FILE:-/dev/null}"
+    fi
+}
+
 # Generar todos los secretos
 generate_all_secrets() {
     log_info "Generando secretos seguros..."
     
     # Crear directorio de secretos
-    local secrets_dir=$(dirname "$SECRETS_FILE")
+    local secrets_dir
+    secrets_dir=$(dirname "$SECRETS_FILE")
     mkdir -p "$secrets_dir"
     chmod 700 "$secrets_dir"
     
     # Generar contraseñas (32 bytes base64)
-    export MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
-    export MYSQL_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
-    export REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
-    export MONGO_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
+    export MYSQL_ROOT_PASSWORD
+    MYSQL_ROOT_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
+    export MYSQL_PASSWORD
+    MYSQL_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
+    export REDIS_PASSWORD
+    REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
+    export MONGO_PASSWORD
+    MONGO_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
     
     # Generar clave secreta JWT (64 caracteres hex)
-    export SECRET_KEY=$(openssl rand -hex 32)
+    export SECRET_KEY
+    SECRET_KEY=$(openssl rand -hex 32)
     
     # Generar claves de cifrado de dispositivo
-    export DEVICE_ENCRYPTION_KEY=$(openssl rand -hex 32)
+    export DEVICE_ENCRYPTION_KEY
+    DEVICE_ENCRYPTION_KEY=$(openssl rand -hex 32)
     
     # Guardar en archivo
     cat > "$SECRETS_FILE" << EOF
@@ -55,39 +78,53 @@ EOF
 
 # Generar hash Argon2 (para datos de prueba)
 hash_password_argon2() {
-    local password=$1
-    python3 -c "
+    local password="$1"
+    ensure_argon2_venv
+
+    # Pasamos el password por env var para evitar problemas de quoting/inyección.
+    ARGON2_PASSWORD="$password" "$ARGON2_VENV_PY" - <<'PY'
+import os
 from passlib.context import CryptContext
+
+pwd = os.environ["ARGON2_PASSWORD"]
+
 pwd_context = CryptContext(
-    schemes=['argon2'],
-    deprecated='auto',
+    schemes=["argon2"],
+    deprecated="auto",
     argon2__memory_cost=102400,
     argon2__time_cost=2,
     argon2__parallelism=8
 )
-print(pwd_context.hash('$password'))
-"
+
+print(pwd_context.hash(pwd))
+PY
 }
 
 # Generar hashes Argon2 para usuarios de prueba
+# Ahora usa ADMIN_PASSWORD del config si está definido, sino usa password123
 generate_test_password_hashes() {
-    log_info "Generando hashes de contraseña Argon2 para usuarios de prueba..."
+    log_info "Generando hashes de contraseña Argon2 para usuarios..."
     
-    # Instalar argon2-cffi si no está disponible
-    if ! python3 -c "import argon2" 2>/dev/null; then
-        log_info "Instalando argon2-cffi..."
-        pip3 install --break-system-packages argon2-cffi passlib 2>&1 | tee -a "$LOG_FILE"
+    # Aseguramos runtime de hashing (venv) antes de hashear.
+    ensure_argon2_venv
+    
+    # Cargar configuración para obtener ADMIN_PASSWORD personalizado
+    if [[ -f "$CONFIG_FILE" ]]; then
+        source "$CONFIG_FILE"
     fi
     
-    # Generar hashes con Argon2
-    # Admin Master: password123
-    export ADMIN_PASSWORD_HASH=$(hash_password_argon2 "password123")
+    # Admin Master: usar ADMIN_PASSWORD si está definido, sino password123
+    local admin_pwd="${ADMIN_PASSWORD:-password123}"
+    export ADMIN_PASSWORD_HASH
+    ADMIN_PASSWORD_HASH=$(hash_password_argon2 "$admin_pwd")
     
-    # Gerente: password123
-    export MANAGER_PASSWORD_HASH=$(hash_password_argon2 "password123")
+    # Gerente: password123 (usuario de prueba)
+    export MANAGER_PASSWORD_HASH
+    MANAGER_PASSWORD_HASH=$(hash_password_argon2 "password123")
     
-    # Usuario: password123
-    export USER_PASSWORD_HASH=$(hash_password_argon2 "password123")
+    # Usuario: password123 (usuario de prueba)
+    export USER_PASSWORD_HASH
+    USER_PASSWORD_HASH=$(hash_password_argon2 "password123")
     
     log_success "Hashes de contraseña Argon2 generados"
 }

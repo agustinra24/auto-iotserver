@@ -1,648 +1,653 @@
-# Plataforma IoT de Prevencion de Incendios - Instalador Automatizado v2.3
+```markdown
+# Plataforma IoT para Prevención de Incendios
 
-Plataforma IoT de prevencion de incendios de grado produccion con **4 tipos de autenticacion**, **puzzles criptograficos para dispositivos**, **datos de sensores en MongoDB** y **aplicacion de sesion unica**.
+**Versión 1.0** | Instalador Automatizado para Debian 13
 
-Construida con **FastAPI**, **MySQL**, **MongoDB**, **Redis**, **Nginx** y **nftables**.
-
----
-
-## Arquitectura del Sistema
-
-```
-INTERNET
-    |
-    v
-+-------------------------------------------------------------+
-| CAPA 1: RED (nftables + Fail2Ban)                           |
-| - Puertos: {{SSH_PORT}}(SSH), 80(HTTP), 443(HTTPS futuro)   |
-| - Rate limiting: 10 req/s                                    |
-| - Bloqueo automatico de IP despues de 5 fallos SSH          |
-+-------------------------------------------------------------+
-    |
-    v
-+-------------------------------------------------------------+
-| CAPA 2: REVERSE PROXY (Nginx 1.25)                          |
-| - Rate limiting: 10r/s API, 5r/m Auth                        |
-| - Headers de seguridad (XSS, CSRF, Clickjacking)             |
-| - Terminacion SSL (futuro)                                   |
-+-------------------------------------------------------------+
-    |
-    v
-+-------------------------------------------------------------+
-| CAPA 3: APLICACION (FastAPI 0.110.0)                        |
-| - 4 tipos de autenticacion + logout                          |
-| - Puzzles criptograficos para dispositivos (AES-256 + HMAC-SHA256) |
-| - Hashing de contrasenas con Argon2id                        |
-| - Aplicacion de sesion unica via Redis                       |
-| - Registro de sesiones en CSV                                |
-+-------------------------------------------------------------+
-    |
-    +------------+------------+------------+
-    v            v            v            v
-+--------+  +--------+  +--------+  +--------+
-| MySQL  |  | Redis  |  |MongoDB |  | Logs   |
-| :3306* |  | :6379* |  |:27017* |  | /var/  |
-| RBAC   |  |Sessions|  |Sensors |  | log/   |
-| Users  |  | Cache  |  | ACTIVO |  |fastapi |
-+--------+  +--------+  +--------+  +--------+
-
-* Solo red interna de Docker (172.20.0.0/16) - NO expuesto al host
-```
+Sistema completo de monitoreo IoT con autenticación criptográfica de dispositivos, gestión de usuarios multi-nivel y almacenamiento distribuido de datos de sensores.
 
 ---
 
-## Inicio Rapido
+## Descripción General
 
-### Prerequisitos
+Esta plataforma permite la implementación de redes de sensores IoT orientadas a la prevención y detección temprana de incendios. El sistema está diseñado para escenarios de alto riesgo como zonas forestales, instalaciones industriales y áreas urbanas densas.
+
+El instalador automatizado despliega la infraestructura completa en 10-15 minutos sobre un servidor Debian 13 limpio, configurando todas las capas de seguridad, bases de datos y servicios de aplicación sin intervención manual.
+
+**Casos de uso principales:**
+
+- Monitoreo continuo de temperatura y niveles de humo en áreas extensas
+- Gestión centralizada de múltiples dispositivos sensores distribuidos geográficamente
+- Histórico de lecturas para análisis de patrones y predicción de riesgos
+- Sistema de alertas basado en umbrales configurables
+- Acceso diferenciado por roles para operadores, supervisores y administradores
+
+---
+
+## Características Técnicas
+
+### Autenticación Multi-Nivel
+
+El sistema implementa cuatro mecanismos de autenticación independientes, cada uno diseñado para un tipo específico de entidad:
+
+**Usuarios Finales**  
+Acceso de solo lectura para consulta de reportes y visualización de datos históricos. Ideal para personal de monitoreo básico.
+
+**Gerentes Operativos**  
+Permisos para crear servicios, asignar dispositivos a zonas específicas y gestionar usuarios de nivel inferior. Diseñado para coordinadores de área.
+
+**Administradores**  
+Control total del sistema incluyendo gestión de roles, permisos, dispositivos y configuración de infraestructura.
+
+**Dispositivos IoT**  
+Autenticación mediante reto criptográfico basado en AES-256-CBC y HMAC-SHA256. El dispositivo demuestra posesión de la clave secreta sin transmitirla, previniendo ataques de replay y man-in-the-middle.
+
+### Política de Sesión Única
+
+Cada entidad solo puede mantener una sesión activa simultáneamente. Si se detecta un intento de inicio de sesión mientras existe una sesión vigente, el sistema rechaza la solicitud con código HTTP 409 Conflict. Esto previene compartir credenciales y mejora la trazabilidad de acciones.
+
+### Arquitectura de Datos Distribuida
+
+| Base de Datos | Propósito | Modelo |
+|---------------|-----------|--------|
+| MySQL 8.0 | Entidades del sistema (usuarios, roles, dispositivos, servicios) | Relacional normalizado |
+| MongoDB 7.0 | Lecturas de sensores, logs de dispositivos, alertas de incendio | Documental con índices optimizados |
+| Redis 7 | Sesiones activas, caché de autenticación | Clave-valor en memoria |
+
+Esta separación permite escalar cada componente de forma independiente según las necesidades de carga y retención de datos.
+
+### Capas de Seguridad
+
+El sistema implementa defensa en profundidad mediante cinco capas consecutivas:
+
+1. **nftables** - Firewall de red con conjuntos dinámicos de IPs bloqueadas y limitación de conexiones por segundo
+2. **Fail2Ban** - Detección de patrones de ataque en logs y bloqueo automático de IPs maliciosas (5 jails activos)
+3. **Nginx** - Proxy inverso con rate limiting por endpoint, headers de seguridad y filtrado de solicitudes sospechosas
+4. **FastAPI** - Validación de tokens JWT, verificación de permisos por rol y sanitización de entradas
+5. **Aislamiento de red** - Las bases de datos solo son accesibles desde la red interna de Docker (172.20.0.0/16)
+
+Ninguna base de datos acepta conexiones desde el host o internet, eliminando vectores de ataque directo.
+
+---
+
+## Requisitos Previos
+
+### Servidor
+
+- Debian 13 (Trixie) con instalación limpia
+- Mínimo 2 núcleos de CPU y 4 GB de RAM
+- 20 GB de almacenamiento disponible
+- Conexión a internet estable
+- Acceso SSH con privilegios sudo
+- Git instalado (`sudo apt-get install git`)
+
+### Recomendaciones
+
+- Servidor dedicado o VPS con IP pública estática
+- Acceso a consola del proveedor (respaldo en caso de problemas con SSH)
+- Snapshot o backup del servidor antes de iniciar
+
+---
+
+## Instalación
+
+### Clonar el Repositorio
+
+Conectar al servidor vía SSH e instalar Git si no está disponible:
 
 ```bash
-# Requisitos
-- VPS Debian 13 (Trixie) limpio
-- Acceso root o sudo
-- Minimo 4GB RAM, 20GB disco
-- Conexion a internet estable
-- 2-3 horas de tiempo disponible
-- Acceso a consola VPS (respaldo si SSH falla)
+sudo apt-get update
+sudo apt-get install -y git
 ```
 
-### Instalacion
+Clonar el repositorio del instalador:
 
 ```bash
-# 1. Descargar y extraer instalador
-tar -xzf iot-installer-v2.3.tar.gz
-cd iot-platform-installer
+git clone https://github.com/agustinra24/auto-iotserver
+cd auto-iotserver
+```
 
-# 2. Hacer ejecutable
+### Asignar Permisos de Ejecución
+
+```bash
 chmod +x install.sh lib/*.sh
+```
 
-# 3. Vista previa de instalacion (recomendado primero)
+### Vista Previa de Cambios
+
+Antes de modificar el sistema, es posible revisar todas las operaciones que se ejecutarán:
+
+```bash
 sudo ./install.sh --dry-run
+```
 
-# 4. Ejecutar instalacion
+Este modo muestra el plan completo sin aplicar cambios.
+
+### Ejecución del Instalador
+
+Iniciar la instalación interactiva:
+
+```bash
 sudo ./install.sh
 ```
 
-### Modos de Ejecucion
+El instalador solicitará los siguientes parámetros de configuración:
 
-|Comando|Comportamiento|
-|---|---|
-|`sudo ./install.sh`|Menu interactivo con 4 opciones|
-|`sudo ./install.sh --dry-run`|Vista previa de pasos, sin cambios al sistema|
-|`sudo ./install.sh --resume`|Reanudar desde ultimo checkpoint|
+- **Dirección IP del servidor** - Se detecta automáticamente, confirmar o modificar
+- **Nombre de usuario del sistema** - Reemplaza al usuario por defecto de Debian
+- **Puerto SSH personalizado** - Se recomienda usar un puerto no estándar (ej: 5259)
+- **Nombre de dominio** - Opcional, para configuración futura de SSL/TLS
+- **Credenciales del administrador principal** - Email y contraseña para la cuenta maestra de la plataforma
+
+Todos los valores entre corchetes son sugerencias del sistema. Presionar Enter acepta el valor por defecto.
+
+### Proceso de Instalación
+
+El instalador ejecuta 14 fases secuenciales:
+
+1. Preparación y validación de recursos del sistema
+2. Creación de usuario administrativo y transición automática
+3. Instalación de dependencias base (Python, herramientas de compilación)
+4. Configuración de firewall con nftables
+5. Despliegue de Fail2Ban con jails para SSH y Nginx
+6. Hardening de SSH (cambio de puerto, deshabilitación de root)
+7. Instalación de Docker CE y Docker Compose
+8. Creación de estructura de directorios del proyecto
+9. Despliegue de aplicación FastAPI
+10. Inicialización de esquema de base de datos MySQL
+11. Configuración de Nginx como proxy inverso
+12. Orquestación de contenedores con Docker Compose
+13. Pruebas de integración y validación de endpoints
+14. Limpieza de archivos temporales y verificación final
+
+Cada fase incluye checkpoints. Si la instalación se interrumpe, es posible reanudar desde el último punto exitoso usando `--resume`.
+
+### Tiempo de Instalación
+
+Entre 10 y 15 minutos dependiendo de la velocidad del servidor y la latencia de red.
 
 ---
 
-## Sistema de Autenticacion (4 Tipos + Logout)
+## Estructura del Proyecto
 
-### 1. Autenticacion de Usuario
-
-```bash
-POST /api/v1/auth/login/user
-Body: {"email": "user@fire.com", "password": "password123"}
-Response: {"access_token": "...", "user_id": 1, "role": "user"}
-TTL: 60 minutos
-```
-
-### 2. Autenticacion de Administrador
-
-```bash
-POST /api/v1/auth/login/admin
-Body: {"email": "master@fire.com", "password": "password123"}
-Response: {"access_token": "...", "admin_id": 1, "role": "admin_master"}
-TTL: 60 minutos
-```
-
-### 3. Autenticacion de Gerente
-
-```bash
-POST /api/v1/auth/login/manager
-Body: {"email": "gerente@fire.com", "password": "password123"}
-Response: {"access_token": "...", "manager_id": 1, "role": "manager"}
-TTL: 60 minutos
-```
-
-### 4. Autenticacion de Dispositivo (Puzzle Criptografico)
-
-```bash
-POST /api/v1/auth/device/login
-Body: {
-  "device_id": 1,
-  "api_key": "TEST_DEVICE_API_KEY_32_CHARS_XX",
-  "puzzle_response": {
-    "id_origen": 1,
-    "Random dispositivo": "base64...",
-    "Parametro de identidad cifrado": {
-      "ciphertext": "base64...",
-      "iv": "base64..."
-    }
-  }
-}
-Response: {"access_token": "...", "device_id": 1}
-TTL: 24 horas
-```
-
-### 5. Logout
-
-```bash
-POST /api/v1/auth/logout
-Header: Authorization: Bearer <token>
-Response: 204 No Content
-```
-
-### Aplicacion de Sesion Unica
+Ubicación por defecto: `/home/<usuario>/iot-platform/`
 
 ```
-Intento de login -> Verificar Redis -> Existe sesion?
-    |                                      |
-    |                      +---------------+---------------+
-    |                      |                               |
-    |                     SI                              NO
-    |                      |                               |
-    |                      v                               v
-    |              409 Conflict                     Crear JWT
-    |              "Ya existe                        con JTI
-    |               sesion"                            |
-    |                                                  v
-    |                                        Almacenar en Redis
-    |                                        session:{type}:{id}
-    |                                                  |
-    +--------------------------------------------------+
+iot-platform/
+├── docker-compose.yml          # Orquestación de 5 contenedores
+├── .env                        # Variables de entorno (credenciales generadas)
+├── fastapi-app/                # Código fuente de la aplicación
+│   ├── app.py                  # Punto de entrada
+│   ├── core/                   # Seguridad, configuración, criptografía
+│   ├── models/                 # 14 modelos SQLAlchemy
+│   ├── schemas/                # Validación Pydantic
+│   ├── api/v1/routers/         # Endpoints REST
+│   └── database/               # Gestores de MySQL y MongoDB
+├── mysql-init/
+│   └── init.sql                # Esquema de base de datos (14 tablas)
+├── nginx/
+│   ├── nginx.conf              # Configuración principal
+│   └── conf.d/
+│       └── iot-api.conf        # Site config con rate limiting
+└── logs/                       # Registros de todos los servicios
+    ├── mysql/
+    ├── mongodb/
+    ├── redis/
+    ├── fastapi/
+    │   └── sessions/
+    │       └── sessions_history.csv
+    └── nginx/
 ```
 
 ---
 
-## Datos de Sensores en MongoDB (NUEVO en v2.3)
+## Uso de la API
 
-### Enviar Lecturas de Sensores (Dispositivo)
+### Verificación de Estado
 
-```bash
-POST /api/v1/device/reading
-Header: Authorization: Bearer <device_token>
-Body: {
-  "device_id": 1,
-  "temperature": 25.5,
-  "smoke_level": 3,
-  "battery": 85,
-  "location": "Main Hall"
-}
-Response: {
-  "message": "Readings received and saved successfully",
-  "readings_count": 3,
-  "inserted_ids": ["...", "...", "..."]
-}
-```
-
-### Consultar Historial de Sensores (Usuario/Admin)
+Comprobar que todos los servicios están operacionales:
 
 ```bash
-GET /api/v1/devices/1/readings?sensor_type=temperature&limit=100
-Header: Authorization: Bearer <user_token>
-Response: {
-  "device_id": 1,
-  "readings_count": 100,
-  "readings": [
-    {"sensor_type": "temperature", "value": 25.5, "unit": "°C", ...}
-  ]
-}
+curl http://<IP_SERVIDOR>/health
 ```
 
-### Colecciones de MongoDB
+Respuesta esperada:
+```json
+{"status": "healthy"}
+```
 
-|Coleccion|Proposito|Indices|
-|---|---|---|
-|`sensor_readings`|Datos de sensores|device_id+timestamp, sensor_type|
-|`device_logs`|Actividad de dispositivos|device_id+timestamp|
-|`alerts`|Alertas de incendio|device_id+resolved, timestamp|
+### Autenticación de Administrador
 
----
-
-## Endpoints de Prueba (Para Demostraciones)
-
-### Inicializar Clave de Cifrado del Dispositivo
+Obtener token JWT para la cuenta maestra:
 
 ```bash
-POST /api/v1/auth/device/init-encryption-key?device_id=1
-Response: {
-  "message": "Encryption key generated and saved successfully",
-  "device_id": 1,
-  "key_length": 32,
-  "api_key": "TEST_DEVICE_API_KEY_32_CHARS_XX"
-}
-```
-
-### Generar Puzzle para Pruebas
-
-```bash
-POST /api/v1/auth/device/generate-puzzle-test?device_id=1
-Response: {
-  "message": "Puzzle generated successfully",
-  "device_id": 1,
-  "api_key": "...",
-  "puzzle": {
-    "id_origen": 1,
-    "Random dispositivo": "...",
-    "Parametro de identidad cifrado": {...}
-  }
-}
-```
-
-### Flujo de Pruebas
-
-```
-1. POST /device/init-encryption-key?device_id=1
-   -> Genera clave de cifrado de 32 bytes
-
-2. POST /device/generate-puzzle-test?device_id=1
-   -> Genera puzzle (simula comportamiento del dispositivo)
-
-3. POST /device/login
-   -> Usar puzzle del paso 2 en puzzle_response
-   -> Recibir token JWT
-
-4. POST /device/reading
-   -> Enviar datos de sensores con token del dispositivo
-```
-
----
-
-## Esquema de Base de Datos
-
-### Tablas MySQL (fire_preventionf)
-
-```
-+-------------+     +-------------+     +-------------+
-|    rol      |     |   permiso   |     | rol_permiso |
-|-------------|     |-------------|     |-------------|
-| id          |<----|  id         |---->| role_id     |
-| nombre      |     | name        |     | permiso_id  |
-| description |     | description |     | created_at  |
-+-------------+     +-------------+     +-------------+
-
-+-------------+     +-------------+
-|  pasadmin   |     |    admin    |
-|-------------|     |-------------|
-| id          |<----| id          |
-| hashed_pass |     | nombre      |
-| encrypt_key |     | email       |
-+-------------+     | rol_id      |
-                    | pasadmin_id |
-                    +-------------+
-
-+-------------+     +-------------+
-| pasusuario  |     |   usuario   |
-|-------------|     |-------------|
-| id          |<----| id          |
-| hashed_pass |     | nombre      |
-| encrypt_key |     | email       |
-+-------------+     | is_active   |
-                    | rol_id      |
-                    | pasusuario_ |
-                    +-------------+
-
-+-------------+     +-------------+
-| pasgerente  |     |   gerente   |
-|-------------|     |-------------|
-| id          |<----| id          |
-| hashed_pass |     | nombre      |
-| encrypt_key |     | email       |
-+-------------+     | admin_id    |
-                    | pasgerente_ |
-                    | rol_id      |
-                    +-------------+
-
-+--------------+    +-------------+
-|pasdispositivo|    | dispositivo |
-|--------------|    |-------------|
-| id           |<---| id          |
-| api_key      |    | nombre      |
-| encrypt_key  |    | device_type |
-+--------------+    | is_active   |
-                    | admin_id    |
-                    | pasdisp_id  |
-                    +-------------+
-```
-
-### Roles y Permisos por Defecto
-
-|Rol|Permisos|
-|---|---|
-|`admin_master`|TODOS (16 permisos)|
-|`admin_normal`|create_service, assign_device, view_reports, view_all_users|
-|`manager`|create_user, create_service, assign_device, view_reports, view_all_users|
-|`user`|view_reports, view_all_users|
-
----
-
-## Caracteristicas de Seguridad
-
-### Hashing de Contrasenas (Argon2id)
-
-```python
-# Configuracion
-argon2__memory_cost=102400  # 100 MB
-argon2__time_cost=2
-argon2__parallelism=8
-
-# Formato del hash
-$argon2id$v=19$m=102400,t=2,p=8$salt$hash
-```
-
-### Autenticacion Criptografica de Dispositivos
-
-```
-Fundamento Matematico:
-
-K_HMAC = K_device || K_server
-P2 = HMAC-SHA256(K_HMAC, R2)
-P2c = AES-256-CBC(P2, K_device, IV)
-
-El dispositivo demuestra posesion de K_device sin transmitirla.
-```
-
-### Gestion de Sesiones
-
-```
-Claves en Redis:
-- session:user:{id} = "jti-uuid"     TTL: 3600s
-- session:admin:{id} = "jti-uuid"    TTL: 3600s
-- session:manager:{id} = "jti-uuid"  TTL: 3600s
-- session:device:{id} = "jti-uuid"   TTL: 86400s
-```
-
-### Registro de Sesiones (CSV)
-
-```
-Ubicacion: /var/log/fastapi/sessions/sessions_history.csv
-
-Columnas:
-timestamp, event, user_id, user_type, email, jti,
-ip_address, user_agent, expires_at, reason, endpoint
-
-Eventos: login, login_rejected, logout, expired
-```
-
----
-
-## Estructura del Paquete
-
-```
-iot-platform-installer-v2.3/
-├── install.sh                    # Instalador principal
-├── README.md                     # Este archivo
-├── lib/
-│   ├── common.sh                 # Logging, utilidades
-│   ├── ui.sh                     # Barras de progreso, banners
-│   ├── validation.sh             # Validacion de entrada
-│   ├── secrets.sh                # Generacion de hash Argon2
-│   └── phases.sh                 # 13 fases de instalacion
-├── templates/
-│   ├── docker-compose.yml.tpl    # Orquestacion Docker
-│   ├── env.tpl                   # Variables de entorno
-│   ├── mysql-init.sql.tpl        # Esquema de base de datos
-│   ├── nftables.conf.tpl         # Reglas de firewall
-│   ├── nginx.conf.tpl            # Configuracion principal de Nginx
-│   ├── nginx-site.conf.tpl       # Configuracion de sitio Nginx
-│   ├── fail2ban-*.tpl            # Configuraciones de Fail2Ban
-│   └── fastapi-app/              # Aplicacion FastAPI completa
-│       ├── app.py
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       ├── database.py
-│       ├── core/
-│       │   ├── config.py         # Settings + RedisManager
-│       │   ├── security.py       # Argon2 + JWT
-│       │   ├── crypto_new.py     # Puzzles de dispositivo
-│       │   ├── services.py       # Servicios de Auth + Session
-│       │   ├── session_logger.py # Registro CSV
-│       │   ├── decorators.py     # Decoradores de validacion
-│       │   ├── validators.py     # Validadores regex
-│       │   └── utils.py          # ResponseFormatter
-│       ├── database/
-│       │   ├── __init__.py       # Configuracion SQLAlchemy
-│       │   └── mongo.py          # Manager de MongoDB
-│       ├── models/               # 14 modelos SQLAlchemy
-│       ├── schemas/              # 5 schemas Pydantic
-│       └── api/
-│           ├── deps.py           # Dependencias de autenticacion
-│           └── v1/routers/
-│               ├── auth.py       # Login/logout + pruebas
-│               ├── users.py      # Gestion de usuarios
-│               ├── devices.py    # Gestion de dispositivos
-│               ├── sensors.py    # Datos de sensores MongoDB
-│               └── alerts.py     # Placeholder
-└── logs/                         # Logs de ejecucion
-```
-
----
-
-## Pruebas Post-Instalacion
-
-### 1. Health Check
-
-```bash
-curl http://localhost/health
-# Esperado: {"status":"healthy"}
-```
-
-### 2. Login de Administrador
-
-```bash
-curl -X POST http://localhost/api/v1/auth/login/admin \
-  -H "Content-Type: application/json" \
-  -d '{"email":"master@fire.com","password":"password123"}'
-# Esperado: {"access_token":"...","admin_id":1,"role":"admin_master"}
-```
-
-### 3. Prueba de Sesion Unica
-
-```bash
-# Segundo intento de login (deberia fallar)
-curl -X POST http://localhost/api/v1/auth/login/admin \
-  -H "Content-Type: application/json" \
-  -d '{"email":"master@fire.com","password":"password123"}'
-# Esperado: {"detail":"Active session exists..."}
-```
-
-### 4. Logout
-
-```bash
-curl -X POST http://localhost/api/v1/auth/logout \
-  -H "Authorization: Bearer <token>"
-# Esperado: 204 No Content
-```
-
-### 5. Flujo de Autenticacion de Dispositivo
-
-```bash
-# Paso 1: Inicializar clave del dispositivo
-curl -X POST "http://localhost/api/v1/auth/device/init-encryption-key?device_id=1"
-
-# Paso 2: Generar puzzle
-curl -X POST "http://localhost/api/v1/auth/device/generate-puzzle-test?device_id=1"
-# Copiar el objeto puzzle
-
-# Paso 3: Login con puzzle
-curl -X POST http://localhost/api/v1/auth/device/login \
+curl -X POST http://<IP_SERVIDOR>/api/v1/auth/login/admin \
   -H "Content-Type: application/json" \
   -d '{
-    "device_id": 1,
-    "api_key": "TEST_DEVICE_API_KEY_32_CHARS_XX",
-    "puzzle_response": <PEGAR_PUZZLE_AQUI>
+    "email": "admin@example.com",
+    "password": "tu_contraseña_segura"
   }'
+```
 
-# Paso 4: Enviar datos de sensores
-curl -X POST http://localhost/api/v1/device/reading \
+Respuesta:
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "admin_id": 1,
+  "role": "admin_master"
+}
+```
+
+### Uso del Token
+
+Incluir el token en el header Authorization de solicitudes subsecuentes:
+
+```bash
+curl http://<IP_SERVIDOR>/api/v1/users \
+  -H "Authorization: Bearer <token>"
+```
+
+### Cerrar Sesión
+
+Invalidar el token actual:
+
+```bash
+curl -X POST http://<IP_SERVIDOR>/api/v1/auth/logout \
+  -H "Authorization: Bearer <token>"
+```
+
+### Documentación Interactiva
+
+La API incluye interfaz Swagger para exploración y pruebas:
+
+```
+http://<IP_SERVIDOR>/docs
+```
+
+---
+
+## Autenticación de Dispositivos
+
+Los sensores IoT utilizan un protocolo de autenticación basado en retos criptográficos que previene ataques de replay y protege las claves secretas.
+
+### Fundamento Matemático
+
+Cada dispositivo posee una clave de cifrado `K_device` de 32 bytes almacenada de forma segura. El servidor mantiene una clave complementaria `K_server` derivada de la clave maestra JWT.
+
+**Proceso de autenticación:**
+
+1. Dispositivo genera número aleatorio `R2` (32 bytes)
+2. Calcula parámetro de identidad: `P2 = HMAC-SHA256(K_device || K_server, R2)`
+3. Cifra el parámetro: `P2c = AES-256-CBC(P2, K_device, IV_aleatorio)`
+4. Envía al servidor: `{id_origen, R2, P2c}`
+5. Servidor reconstruye `P2` usando su copia de `K_device`
+6. Descifra `P2c` y compara con su cálculo
+7. Si coincide, emite JWT con validez de 24 horas
+
+El dispositivo demuestra posesión de `K_device` sin transmitirla en ningún momento.
+
+### Endpoints de Prueba
+
+Para facilitar el desarrollo, la API incluye endpoints auxiliares que simulan el comportamiento del dispositivo:
+
+**Inicializar clave del dispositivo:**
+```bash
+curl -X POST "http://<IP>/api/v1/auth/device/init-encryption-key?device_id=1"
+```
+
+**Generar reto criptográfico de prueba:**
+```bash
+curl -X POST "http://<IP>/api/v1/auth/device/generate-puzzle-test?device_id=1"
+```
+
+Estos endpoints solo deben usarse en entornos de desarrollo. En producción, los dispositivos generan sus propios retos.
+
+---
+
+## Gestión de Datos de Sensores
+
+Los dispositivos envían lecturas a MongoDB mediante el endpoint de telemetría.
+
+### Enviar Lecturas
+
+```bash
+curl -X POST http://<IP>/api/v1/device/reading \
   -H "Authorization: Bearer <device_token>" \
   -H "Content-Type: application/json" \
   -d '{
     "device_id": 1,
-    "temperature": 25.5,
-    "smoke_level": 3,
-    "battery": 85,
-    "location": "Main Hall"
+    "temperature": 28.5,
+    "smoke_level": 12,
+    "battery": 87,
+    "location": "Sector Norte - Zona A"
   }'
 ```
 
-### 6. Aislamiento de Base de Datos
+El sistema normaliza automáticamente las lecturas, creando un documento por cada tipo de sensor (temperatura, humo, batería).
+
+### Consultar Histórico
 
 ```bash
-# Todos deberian FALLAR (conexion rechazada)
-nc -zv localhost 3306   # MySQL
-nc -zv localhost 6379   # Redis
-nc -zv localhost 27017  # MongoDB
+curl "http://<IP>/api/v1/devices/1/readings?sensor_type=temperature&limit=100" \
+  -H "Authorization: Bearer <user_token>"
+```
+
+Parámetros de consulta disponibles:
+- `sensor_type`: Filtrar por tipo (temperature, smoke_level, battery)
+- `start_date`: Fecha de inicio (ISO 8601)
+- `end_date`: Fecha de fin (ISO 8601)
+- `limit`: Máximo de registros (default: 100, max: 1000)
+
+---
+
+## Modelo de Datos
+
+### Esquema Relacional (MySQL)
+
+El sistema implementa RBAC (Role-Based Access Control) con 14 tablas:
+
+**Entidades principales:**
+- `usuario`, `gerente`, `admin` - Cuentas del sistema
+- `dispositivo` - Sensores IoT registrados
+- `servicio` - Agrupaciones lógicas de dispositivos
+- `app` - Aplicaciones cliente que consumen la API
+
+**Control de acceso:**
+- `rol` - Perfiles de permisos (admin_master, admin_normal, manager, user)
+- `permiso` - Acciones granulares (create_user, edit_device, view_reports, etc.)
+- `rol_permiso` - Tabla de unión muchos-a-muchos
+
+**Seguridad:**
+- `pasusuario`, `pasgerente`, `pasadmin`, `pasdispositivo` - Almacenamiento aislado de credenciales
+
+Las contraseñas se hashean con Argon2id usando parámetros resistentes a ataques GPU:
+- 100 MB de memoria
+- 2 iteraciones
+- 8 hilos paralelos
+
+### Colecciones de MongoDB
+
+**sensor_readings** - Lecturas normalizadas de sensores
+```javascript
+{
+  device_id: "1",
+  sensor_type: "temperature",
+  value: 28.5,
+  unit: "°C",
+  location: "Sector Norte",
+  timestamp: ISODate("2024-12-16T10:30:00Z")
+}
+```
+
+**device_logs** - Eventos de dispositivos (conexión, desconexión, errores)
+
+**alerts** - Alertas de incendio generadas por umbrales
+
+Índices optimizados para consultas por dispositivo, tipo de sensor y rango temporal.
+
+---
+
+## Verificación Post-Instalación
+
+### Estado de Contenedores
+
+Todos los servicios deben estar en estado "healthy":
+
+```bash
+cd ~/iot-platform
+sudo docker compose ps
+```
+
+Salida esperada (5 contenedores):
+```
+NAME            STATUS          PORTS
+iot-mysql       Up (healthy)    
+iot-mongodb     Up (healthy)    
+iot-redis       Up (healthy)    
+iot-fastapi     Up (healthy)    0.0.0.0:5000->5000/tcp
+iot-nginx       Up (healthy)    0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
+```
+
+### Aislamiento de Bases de Datos
+
+Verificar que ninguna base de datos acepta conexiones externas:
+
+```bash
+nc -zv localhost 3306   # MySQL - debe fallar
+nc -zv localhost 6379   # Redis - debe fallar
+nc -zv localhost 27017  # MongoDB - debe fallar
+```
+
+Si algún puerto responde, existe un problema de configuración de seguridad.
+
+### Jails de Fail2Ban
+
+Confirmar que los 5 jails están activos:
+
+```bash
+sudo fail2ban-client status
+```
+
+Salida esperada:
+```
+|- Number of jail:      5
+`- Jail list:   nginx-badbots, nginx-botsearch, nginx-http-auth, 
+                nginx-limit-req, sshd
+```
+
+### Prueba de Autenticación
+
+Verificar los cuatro tipos de login:
+
+```bash
+# Usuario
+curl -X POST http://localhost/api/v1/auth/login/user \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@fire.com","password":"password123"}'
+
+# Gerente
+curl -X POST http://localhost/api/v1/auth/login/manager \
+  -H "Content-Type: application/json" \
+  -d '{"email":"gerente@fire.com","password":"password123"}'
+
+# Administrador
+curl -X POST http://localhost/api/v1/auth/login/admin \
+  -H "Content-Type: application/json" \
+  -d '{"email":"<tu_email>","password":"<tu_contraseña>"}'
 ```
 
 ---
 
-## Stack Tecnologico
+## Tareas Posteriores a la Instalación
 
-|Componente|Version|Proposito|
-|---|---|---|
-|**SO**|Debian 13 (Trixie)|Base del servidor|
-|**Framework**|FastAPI 0.110.0|API asincrona|
-|**ORM**|SQLAlchemy 2.0.25|ORM para MySQL|
-|**RDBMS**|MySQL 8.0|Datos relacionales|
-|**NoSQL**|MongoDB 7.0|Datos de sensores (ACTIVO)|
-|**Cache**|Redis 7|Sesiones + cache|
-|**Proxy**|Nginx 1.25|Reverse proxy|
-|**Firewall**|nftables|Control de trafico|
-|**IDS**|Fail2Ban|Proteccion SSH|
-|**Hashing**|Argon2id|Hashing de contrasenas|
-|**Cifrado**|AES-256-CBC|Claves de dispositivos|
-|**HMAC**|SHA-256|Puzzles de dispositivos|
+### Críticas
 
----
+1. **Respaldar archivo de secretos**
+   ```bash
+   cat ~/.iot-platform/.secrets
+   ```
+   Este archivo contiene todas las contraseñas generadas automáticamente. Sin él, no es posible recuperar acceso a las bases de datos.
 
-## Solucion de Problemas
+2. **Cambiar contraseña del usuario del sistema**
+   ```bash
+   passwd
+   ```
 
-### Problema: "Argon2 hash verification failed"
+3. **Eliminar usuarios de prueba**
+   Los usuarios `user@fire.com` y `gerente@fire.com` tienen contraseñas por defecto. Eliminarlos en entornos de producción.
 
-**Causa**: La contrasena fue hasheada con bcrypt, no con Argon2
+### Recomendadas
 
-**Solucion**:
-
-```bash
-# Regenerar hash de contrasena
-python3 -c "
-from passlib.context import CryptContext
-ctx = CryptContext(schemes=['argon2'])
-print(ctx.hash('password123'))
-"
-# Actualizar en MySQL
-```
-
-### Problema: "MongoDB connection failed"
-
-**Causa**: MongoDB no esta saludable o problemas de autenticacion
-
-**Solucion**:
-
-```bash
-docker logs iot-mongodb
-# Verificar errores de autenticacion
-# Verificar que MONGO_PASSWORD en .env coincida
-```
-
-### Problema: "Session invalid or closed"
-
-**Causa**: El token fue invalidado (logout) o expiro
-
-**Solucion**:
-
-```bash
-# Hacer login nuevamente para obtener nuevo token
-curl -X POST http://localhost/api/v1/auth/login/admin ...
-```
-
-### Problema: "Device puzzle verification failed"
-
-**Causa**: Discrepancia en encryption_key o server_key cambio
-
-**Solucion**:
-
-```bash
-# Reinicializar clave del dispositivo
-curl -X POST "http://localhost/api/v1/auth/device/init-encryption-key?device_id=1"
-# Generar nuevo puzzle e intentar de nuevo
-```
+- Configurar certificados SSL/TLS con Let's Encrypt para habilitar HTTPS
+- Establecer backups automáticos de MySQL y MongoDB
+- Configurar monitoreo de métricas (Prometheus + Grafana)
+- Ajustar parámetros de rate limiting según carga esperada
 
 ---
 
-## Lista de Verificacion Post-Instalacion
+## Solución de Problemas
 
-### Inmediato
+### Instalación Interrumpida
 
-- Cambiar contrasenas por defecto (master@fire.com, etc.)
-- Probar los 4 tipos de autenticacion
-- Verificar aplicacion de sesion unica
-- Probar endpoint de sensores del dispositivo
-- Respaldar archivo de secretos
+El instalador guarda checkpoints en `.install-state`. Para reanudar:
 
-### Corto Plazo
+```bash
+sudo ./install.sh --resume
+```
 
-- Configurar SSL/TLS (Let's Encrypt)
-- Configurar respaldos automatizados
-- Configurar monitoreo
-- Revisar logs de sesiones
-- Crear runbook operacional
+### Problemas de Conexión SSH
 
-### Mediano Plazo
+El puerto SSH cambia durante la instalación. Verificar el puerto configurado:
 
-- Implementar alertas (Prometheus/Grafana)
-- Configurar agregacion de logs
-- Pruebas de rendimiento
-- Auditoria de seguridad
-- Plan de recuperacion ante desastres
+```bash
+grep "SSH_PORT=" .config.env
+```
+
+Conectar usando el nuevo puerto:
+
+```bash
+ssh <usuario>@<ip> -p <puerto>
+```
+
+Si no se puede acceder por SSH, usar la consola del proveedor del VPS.
+
+### Contenedor No Inicia
+
+Ver logs detallados del contenedor problemático:
+
+```bash
+cd ~/iot-platform
+sudo docker compose logs <nombre_contenedor> --tail=50
+```
+
+Reiniciar contenedor específico:
+
+```bash
+sudo docker compose restart <nombre_contenedor>
+```
+
+### Fail2Ban No Inicia
+
+Verificar errores de configuración:
+
+```bash
+sudo fail2ban-server -f --loglevel DEBUG 2>&1 | head -50
+```
+
+Error común: archivos de log de Nginx no existen aún. Solución:
+
+```bash
+cd ~/iot-platform/logs/nginx
+sudo touch iot-api-access.log iot-api-error.log
+sudo systemctl restart fail2ban
+```
+
+### Error de Autenticación de Dispositivo
+
+Si la verificación del puzzle falla:
+
+1. Verificar que la clave del dispositivo existe:
+   ```bash
+   sudo docker exec iot-mysql mysql -u root -p<password> -e \
+     "SELECT id, LENGTH(encryption_key) FROM fire_preventionf.pasdispositivo WHERE id=1;"
+   ```
+
+2. Reinicializar clave si es necesario:
+   ```bash
+   curl -X POST "http://localhost/api/v1/auth/device/init-encryption-key?device_id=1"
+   ```
 
 ---
 
-## Credenciales por Defecto
+## Stack Tecnológico
 
-**CAMBIAR INMEDIATAMENTE DESPUES DE LA INSTALACION**
+| Componente | Versión | Propósito |
+|------------|---------|-----------|
+| Debian | 13 (Trixie) | Sistema operativo base |
+| Docker | CE + Compose v2 | Contenedorización y orquestación |
+| FastAPI | 0.110.0 | Framework de API asíncrona |
+| Uvicorn | 0.27.1 | Servidor ASGI |
+| SQLAlchemy | 2.0.25 | ORM para MySQL |
+| MySQL | 8.0 | RDBMS para datos estructurados |
+| MongoDB | 7.0 | NoSQL para series temporales |
+| PyMongo | 4.6.0 | Cliente de MongoDB |
+| Redis | 7 | Store de sesiones en memoria |
+| Nginx | 1.25-alpine | Proxy inverso y balanceador |
+| nftables | - | Firewall de red |
+| Fail2Ban | - | Sistema de prevención de intrusiones |
+| Passlib | 1.7.4 | Librería de hashing |
+| Argon2-cffi | 23.1.0 | Implementación de Argon2 |
+| python-jose | 3.3.0 | Manejo de JWT |
+| Pydantic | 2.5.3 | Validación de datos |
+| PyCryptodome | 3.20.0 | Primitivas criptográficas |
 
-|Entidad|Email|Contrasena|
-|---|---|---|
-|Admin Master|master@fire.com|password123|
-|Gerente|gerente@fire.com|password123|
-|Usuario|user@fire.com|password123|
-|Dispositivo|sensor-test-001|API Key: TEST_DEVICE_API_KEY_32_CHARS_XX|
+---
+
+## Contribución
+
+Las contribuciones son bienvenidas. Este proyecto está diseñado para ser extensible y adaptable a diferentes escenarios de monitoreo IoT.
+
+**Áreas de mejora identificadas:**
+
+- Implementación de alertas en tiempo real vía WebSockets
+- Dashboard web para visualización de datos
+- Integración con sistemas de notificación (SMS, email, push)
+- Soporte para protocolos MQTT y CoAP
+- Mecanismo de actualización automática de la plataforma
+- Tests automatizados de integración y carga
+- Documentación de API en formato OpenAPI 3.1
+
+Para proponer cambios:
+
+1. Fork del repositorio
+2. Crear rama con nombre descriptivo (`feature/nueva-funcionalidad`)
+3. Commit de cambios con mensajes claros
+4. Push a la rama
+5. Abrir Pull Request con descripción detallada
+
+Revisar primero la arquitectura existente y asegurar compatibilidad con el esquema de autenticación actual.
 
 ---
 
 ## Licencia
 
-Ver archivo LICENSE.
+Este proyecto se distribuye bajo los términos especificados en el archivo LICENSE del repositorio.
 
 ---
 
-## Autores
+## Soporte
 
-Basado en los requisitos de la Plataforma de Prevencion de Incendios. Instalador automatizado por el equipo de desarrollo Agustin, Marlene, Sebas, Gemma
+Para problemas de instalación, revisar primero el log generado:
+
+```bash
+cat ~/auto-iotserver/logs/install-<fecha>.log
+```
+
+Este archivo contiene el registro completo de todas las operaciones y mensajes de error detallados.
+
+Para problemas operacionales, verificar los logs de cada servicio:
+
+```bash
+# FastAPI
+sudo docker logs iot-fastapi --tail=100
+
+# Nginx
+sudo docker logs iot-nginx --tail=100
+
+# MySQL
+sudo docker logs iot-mysql --tail=100
+
+# MongoDB
+sudo docker logs iot-mongodb --tail=100
+```
+
+Para reportar problemas o solicitar funcionalidades, usar el sistema de Issues del repositorio:
+
+```
+https://github.com/agustinra24/auto-iotserver
+```
 
 ---
 
-**Version del Paquete:** 2.3
-**Fecha de Lanzamiento:** Diciembre 2025  
-**Compatibilidad:** Debian 13 (Trixie)
-
-**Preguntas? Comenzar con el log de instalacion:** `./logs/install-*.log`
+**Versión 1.0** | Diciembre 2025 
+Sistema de Prevención de Incendios basado en IoT

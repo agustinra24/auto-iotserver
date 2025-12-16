@@ -3,7 +3,6 @@
 # lib/ui.sh - Funciones de UI y visualización en terminal
 ################################################################################
 
-# Mostrar banner ASCII
 show_banner() {
     local title="${1:-Plataforma IoT}"
     
@@ -23,11 +22,8 @@ show_banner() {
 EOF
 }
 
-# Show section header
 show_section_header() {
     local title="$1"
-    local width=70
-    
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo -e "${BOLD}  $title${RESET}"
@@ -35,16 +31,16 @@ show_section_header() {
     echo ""
 }
 
-# Show phase header
 show_phase_header() {
     local phase_num=$1
     local total_phases=$2
     local phase_name=$3
     
-    # Extract friendly name from function name
-    local friendly_name=$(echo "$phase_name" | sed 's/phase_[0-9]*_//' | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+    local friendly_name
+    friendly_name=$(echo "$phase_name" | sed 's/phase_[0-9]*_//' | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
     
-    local progress=$(calc_progress $phase_num $total_phases)
+    local progress
+    progress=$(calc_progress $phase_num $total_phases)
     
     clear
     echo ""
@@ -55,7 +51,6 @@ show_phase_header() {
     echo ""
 }
 
-# Mostrar barra de progreso
 show_progress_bar() {
     local percent=$1
     local width=50
@@ -68,19 +63,14 @@ show_progress_bar() {
     echo -n "] ${percent}%"
 }
 
-# Mostrar fase completada
 show_phase_complete() {
     local phase_num=$1
-    
     echo ""
     echo -e "${GREEN}Fase $phase_num completada exitosamente${RESET}"
     echo ""
-    
-    # Pequeña pausa para que el usuario vea la finalización
     sleep 1
 }
 
-# Mostrar spinner
 show_spinner() {
     local pid=$1
     local message="${2:-Procesando...}"
@@ -96,7 +86,6 @@ show_spinner() {
     printf "\r${GREEN}[OK]${RESET} $message\n"
 }
 
-# Mostrar tarea con estado
 show_task() {
     local task="$1"
     local status="${2:-running}"
@@ -117,13 +106,11 @@ show_task() {
     esac
 }
 
-# Completar tarea actual
 complete_task() {
     local task="$1"
     echo -e "\r  ${GREEN}[OK]${RESET} $task    "
 }
 
-# Show info box
 show_info_box() {
     local title="$1"
     shift
@@ -138,7 +125,6 @@ show_info_box() {
     echo ""
 }
 
-# Show warning box
 show_warning_box() {
     local title="$1"
     shift
@@ -153,7 +139,6 @@ show_warning_box() {
     echo ""
 }
 
-# Mostrar caja de pausa crítica
 show_critical_pause() {
     local phase_name="$1"
     shift
@@ -177,7 +162,7 @@ show_critical_pause() {
     read -p "Presiona ENTER cuando hayas validado: "
 }
 
-# Mostrar plan de dry-run
+# Plan de dry-run actualizado para reflejar flujo de terminal único
 show_dry_run_plan() {
     show_section_header "DRY-RUN: Plan de Instalación"
     
@@ -188,76 +173,65 @@ ${CYAN}[Fase 0]${RESET} Preparación
   • Crear directorio de instalación
   • Configurar logging
 
-${CYAN}[Fase 1]${RESET} Gestión de Usuarios ${RED}(REQUIERE VALIDACIÓN)${RESET}
+${CYAN}[Fase 1]${RESET} Gestión de Usuarios ${GREEN}(TRANSICIÓN AUTOMÁTICA)${RESET}
   • Crear nuevo usuario: $NEW_USERNAME
   • Otorgar privilegios sudo
-  • ${YELLOW}PAUSA: Validar en segunda terminal${RESET}
-  • Eliminar usuario debian
+  • ${GREEN}Continuar automáticamente como nuevo usuario (misma terminal)${RESET}
 
 ${CYAN}[Fase 2]${RESET} Dependencias Base
   • Actualizar paquetes del sistema
   • Instalar herramientas de compilación, Python, herramientas de red
-  • Instalar utilidades de monitoreo
 
 ${CYAN}[Fase 3]${RESET} Firewall (nftables)
   • Configurar reglas de nftables
   • Crear conjuntos de IP dinámicos
-  • Configurar política DROP con puertos permitidos
 
 ${CYAN}[Fase 4]${RESET} Fail2Ban
   • Instalar Fail2Ban
   • Configurar jails para SSH, Nginx
-  • Integrar con nftables
 
-${CYAN}[Fase 5]${RESET} Hardening SSH ${RED}(REQUIERE VALIDACIÓN)${RESET}
+${CYAN}[Fase 5]${RESET} Hardening SSH
   • Cambiar puerto SSH: 22 -> $SSH_PORT
-  • ${YELLOW}PAUSA: Probar nuevo puerto en segunda terminal${RESET}
-  • Deshabilitar login de root
-  • Cerrar puerto 22
+  • Aplicar configuración segura
 
 ${CYAN}[Fase 6]${RESET} Instalación de Docker
   • Agregar repositorio de Docker
   • Instalar Docker + Docker Compose
-  • Configurar daemon
-  • Agregar usuario al grupo docker
 
 ${CYAN}[Fase 7]${RESET} Estructura del Proyecto
   • Crear directorio ~/iot-platform
-  • Copiar templates
   • Generar archivo .env
 
 ${CYAN}[Fase 8]${RESET} Aplicación FastAPI
   • Crear archivos de aplicación (25+ archivos)
-  • Copiar modelos, schemas, routers
-  • Configurar autenticación criptográfica de dispositivos
-  • Construir imagen Docker
 
 ${CYAN}[Fase 9]${RESET} Inicialización de MySQL
   • Crear init.sql (14 tablas)
   • Configurar RBAC (roles, permisos)
-  • Crear datos de prueba
 
 ${CYAN}[Fase 10]${RESET} Configuración de Nginx
   • Configurar proxy reverso
   • Configurar rate limiting
-  • Agregar headers de seguridad
 
 ${CYAN}[Fase 11]${RESET} Despliegue
   • Desplegar con docker-compose
   • Esperar health checks
-  • Verificar que todos los servicios estén corriendo
 
 ${CYAN}[Fase 12]${RESET} Pruebas y Validación
-  • Probar endpoints de autenticación (4 tipos)
-  • Verificar gestión de sesiones
-  • Probar rate limiting
+  • Probar endpoints de autenticación
   • Validar aislamiento de base de datos
+
+${CYAN}[Fase 13]${RESET} Limpieza Final ${RED}(NUEVO EN v4)${RESET}
+  • Eliminar usuario debian
+  • Limpiar archivos temporales
+  • Verificación final del sistema
 
 ${BOLD}Tiempo Total Estimado:${RESET} ~3 horas 15 minutos
 
-${BOLD}Pausas Críticas:${RESET}
-  • Fase 1: Validación de usuario (prueba manual requerida)
-  • Fase 5: Validación de puerto SSH (prueba manual requerida)
+${BOLD}Mejoras en v4:${RESET}
+  • ${GREEN}✓${RESET} Instalación completamente automática (sin cambio de terminal)
+  • ${GREEN}✓${RESET} Usuario debian eliminado al final (safety net)
+  • ${GREEN}✓${RESET} Cálculo de duración corregido
 
 ${BOLD}Secretos Generados:${RESET}
   Todas las contraseñas y claves serán auto-generadas y guardadas en:
@@ -265,10 +239,12 @@ ${BOLD}Secretos Generados:${RESET}
 "
 
     read -p "¿Proceder con la instalación real? [s/N]: " proceed
-    if [[ "$proceed" == "s" ]]; then return 0; else return 1; fi
+    if [[ "${proceed:-}" =~ ^[sSyY]$ ]]; then
+        return 0
+    fi
+    return 1
 }
 
-# Mostrar tabla
 show_table() {
     local header=("$1")
     shift
@@ -283,7 +259,6 @@ show_table() {
     echo ""
 }
 
-# Mostrar lista de verificación
 show_checklist() {
     local title="$1"
     shift
@@ -298,7 +273,6 @@ show_checklist() {
     echo ""
 }
 
-# Temporizador de cuenta regresiva
 countdown() {
     local seconds=$1
     local message="${2:-Esperando...}"
@@ -310,7 +284,6 @@ countdown() {
     echo -e "\r$message ¡Listo!  "
 }
 
-# Confirmar acción
 confirm_action() {
     local message="$1"
     local default="${2:-N}"

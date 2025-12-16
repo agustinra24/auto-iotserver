@@ -1,0 +1,38 @@
+# Archivos de instalación
+.install-state
+.config.env
+logs/
+*.log
+
+# Secretos
+.secrets
+.iot-platform/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# Docker
+.env
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Backups
+*.bak
+*.backup

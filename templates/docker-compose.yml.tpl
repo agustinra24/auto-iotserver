@@ -1,5 +1,5 @@
 # =============================================================================
-# Plataforma IoT de Prevención de Incendios - Docker Compose
+# Plataforma IoT con Seguridad Integrada - Docker Compose
 # MongoDB ACTIVO para datos de sensores
 # =============================================================================
 

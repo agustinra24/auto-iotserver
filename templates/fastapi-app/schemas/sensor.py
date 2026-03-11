@@ -8,7 +8,7 @@ class SensorReading(BaseModel):
     """Schema para recibir lecturas de sensores de dispositivos IoT"""
     device_id: int = Field(..., description="ID del dispositivo que envía las lecturas")
     temperature: Optional[float] = Field(None, description="Temperatura en Celsius")
-    smoke_level: Optional[int] = Field(None, ge=0, le=100, description="Nivel de humo (0-100%)")
+    humidity: Optional[int] = Field(None, ge=0, le=100, description="Humedad relativa (0-100%)")
     battery: Optional[int] = Field(None, ge=0, le=100, description="Nivel de batería (0-100%)")
     location: Optional[str] = Field(None, max_length=200, description="Ubicación del dispositivo")
     timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
@@ -24,7 +24,7 @@ class SensorReading(BaseModel):
             "example": {
                 "device_id": 1,
                 "temperature": 25.3,
-                "smoke_level": 5,
+                "humidity": 5,
                 "battery": 85,
                 "location": "Main Hall",
                 "timestamp": "2024-01-15T10:30:00Z"

@@ -16,7 +16,7 @@ show_banner() {
 ║               _| |_| |\  |/ ____ \ |__| | |____                   ║
 ║              |_____|_| \_/_/    \_\____/|______|                  ║
 ║                                                                   ║
-║              Fire Prevention Platform - Installer                 ║
+║            IoT Platform - Automated Installer                     ║
 ║                                                                   ║
 ╚═══════════════════════════════════════════════════════════════════╝
 EOF

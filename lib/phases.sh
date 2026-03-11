@@ -764,7 +764,7 @@ phase_9_mysql_init() {
     
     show_task "Creando script de inicialización de MySQL" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        local admin_email="${ADMIN_EMAIL:-master@fire.com}"
+        local admin_email="${ADMIN_EMAIL:-master@iot-platform.local}"
         
         sed -e "s|{{ADMIN_PASSWORD_HASH}}|$ADMIN_PASSWORD_HASH|g" \
             -e "s|{{USER_PASSWORD_HASH}}|$USER_PASSWORD_HASH|g" \
@@ -896,7 +896,7 @@ phase_12_testing() {
     
     source "$CONFIG_FILE"
     
-    local admin_email="${ADMIN_EMAIL:-master@fire.com}"
+    local admin_email="${ADMIN_EMAIL:-master@iot-platform.local}"
     local admin_password="${ADMIN_PASSWORD:-password123}"
     
     show_task "Probando endpoint de salud" "running"

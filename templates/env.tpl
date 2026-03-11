@@ -1,11 +1,11 @@
 # =============================================================================
-# Plataforma IoT de Prevención de Incendios - Configuración de Entorno
+# Plataforma IoT con Seguridad Integrada - Configuración de Entorno
 # Generado por el instalador
 # =============================================================================
 
 # Configuración de MySQL
 MYSQL_ROOT_PASSWORD={{MYSQL_ROOT_PASSWORD}}
-MYSQL_DATABASE=fire_preventionf
+MYSQL_DATABASE=iot_platform
 MYSQL_USER=iot_user
 MYSQL_PASSWORD={{MYSQL_PASSWORD}}
 MYSQL_HOST=mysql

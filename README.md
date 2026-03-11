@@ -330,13 +330,13 @@ curl -X POST http://<IP>/api/v1/device/reading \
   -d '{
     "device_id": 1,
     "temperature": 28.5,
-    "smoke_level": 12,
+    "humidity": 12,
     "battery": 87,
     "location": "Sector Norte - Zona A"
   }'
 ```
 
-El sistema normaliza automáticamente las lecturas, creando un documento por cada tipo de sensor (temperatura, humo, batería).
+El sistema normaliza automáticamente las lecturas, creando un documento por cada tipo de sensor (temperatura, humedad, batería).
 
 ### Consultar Histórico
 
@@ -347,7 +347,7 @@ curl "http://<IP>/api/v1/devices/1/readings?sensor_type=temperature&limit=100" \
 
 Parámetros de consulta disponibles:
 
-- `sensor_type`: filtrar por tipo (temperature, smoke_level, battery).
+- `sensor_type`: filtrar por tipo (temperature, humidity, battery).
 - `start_date`: fecha de inicio (ISO 8601).
 - `end_date`: fecha de fin (ISO 8601).
 - `limit`: máximo de registros (default: 100, max: 1000).
@@ -464,12 +464,12 @@ Verificar los tres tipos de login de usuarios:
 # Usuario
 curl -X POST http://localhost/api/v1/auth/login/user \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@fire.com","password":"password123"}'
+  -d '{"email":"user@iot-platform.local","password":"password123"}'
 
 # Gerente
 curl -X POST http://localhost/api/v1/auth/login/manager \
   -H "Content-Type: application/json" \
-  -d '{"email":"gerente@fire.com","password":"password123"}'
+  -d '{"email":"gerente@iot-platform.local","password":"password123"}'
 
 # Administrador
 curl -X POST http://localhost/api/v1/auth/login/admin \
@@ -499,7 +499,7 @@ curl -X POST http://localhost/api/v1/auth/login/admin \
 
 3. **Eliminar usuarios de prueba**
 
-   Los usuarios `user@fire.com` y `gerente@fire.com` tienen contraseñas por defecto. Deben eliminarse en entornos de producción.
+   Los usuarios `user@iot-platform.local` y `gerente@iot-platform.local` tienen contraseñas por defecto. Deben eliminarse en entornos de producción.
 
 ### Recomendadas
 
@@ -575,7 +575,7 @@ Si la verificación del reto criptográfico falla:
 
    ```bash
    sudo docker exec iot-mysql mysql -u root -p<password> -e \
-     "SELECT id, LENGTH(encryption_key) FROM fire_preventionf.pasdispositivo WHERE id=1;"
+     "SELECT id, LENGTH(encryption_key) FROM iot_platform.pasdispositivo WHERE id=1;"
    ```
 
 2. Reinicializar la clave si es necesario:

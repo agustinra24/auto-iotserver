@@ -1,5 +1,5 @@
 """
-Plataforma de Prevención de Incendios - Aplicación Principal
+Plataforma IoT - Aplicación Principal
 FastAPI con MongoDB para datos de sensores
 """
 from fastapi import FastAPI
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="API del Sistema de Prevención de Incendios",
+    title="API de Plataforma IoT",
     description="Plataforma IoT con autenticación criptográfica de dispositivos",
     version="1.0.1",
     lifespan=lifespan
@@ -108,7 +108,7 @@ app.openapi = custom_openapi
 
 @app.get("/")
 def root():
-    return {"message": "API de Prevención de Incendios v2.3", "status": "operacional"}
+    return {"message": "API de Plataforma IoT v1.0.1", "status": "operacional"}
 
 
 @app.get("/health")

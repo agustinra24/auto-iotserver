@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1.0.1
+# Plataforma IoT con Seguridad Integrada - Instalador Automatizado v1.0.1
 #
 # Requisitos: Debian 13 (Trixie) limpio, acceso root/sudo
 # Ejecución: sudo ./install.sh [--dry-run] [--resume]
@@ -115,7 +115,7 @@ parse_arguments() {
 ################################################################################
 show_help() {
     cat << EOF
-Plataforma IoT de Prevención de Incendios - Instalador Automatizado v1.0.1
+Plataforma IoT con Seguridad Integrada - Instalador Automatizado v1.0.1
 
 USO:
     sudo ./install.sh [OPCIONES]
@@ -143,7 +143,7 @@ EOF
 ################################################################################
 show_welcome() {
     clear
-    show_banner "Plataforma IoT de Prevención de Incendios"
+    show_banner "Plataforma IoT con Seguridad Integrada"
     
     echo -e "
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
@@ -538,7 +538,7 @@ show_completion_message() {
     fi
     
     clear
-    show_banner "Plataforma IoT de Prevención de Incendios"
+    show_banner "Plataforma IoT con Seguridad Integrada"
     
     echo -e "
 ${GREEN}+===================================================================+
@@ -588,8 +588,8 @@ ${YELLOW}+-------------------------------------------------------------------+
     Contrasena:  ${CYAN}[la que configuraste]${RESET}
 
   ${BOLD}Usuarios de Prueba (opcional, eliminar en produccion):${RESET}
-    gerente@fire.com / password123
-    user@fire.com    / password123
+    gerente@iot-platform.local / password123
+    user@iot-platform.local    / password123
 
 
 ${BLUE}+-------------------------------------------------------------------+
@@ -618,7 +618,7 @@ ${CYAN}+-------------------------------------------------------------------+
 
   1. Cambiar la contrasena del usuario ${NEW_USERNAME}
   2. Respaldar el archivo de secretos (ver arriba)
-  3. Eliminar usuarios de prueba (gerente@fire.com, user@fire.com)
+  3. Eliminar usuarios de prueba (gerente@iot-platform.local, user@iot-platform.local)
   4. Configurar certificado SSL/TLS para conexiones seguras
   5. Verificar eliminación de debian: ${CYAN}id debian${RESET} (debe dar error)
 

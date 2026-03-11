@@ -42,7 +42,7 @@ def send_sensor_readings(
     
     **Normalización:**
     - temperature → documento tipo "temperature"
-    - smoke_level → documento tipo "smoke_level"
+    - humidity → documento tipo "humidity"
     - battery → documento tipo "battery"
     """
     
@@ -53,10 +53,10 @@ def send_sensor_readings(
                    f"no coincide con device_id del body ({reading.device_id})"
         )
     
-    if reading.temperature is None and reading.smoke_level is None and reading.battery is None:
+    if reading.temperature is None and reading.humidity is None and reading.battery is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Debe enviar al menos una lectura de sensor (temperature, smoke_level o battery)"
+            detail="Debe enviar al menos una lectura de sensor (temperature, humidity o battery)"
         )
     
     timestamp = reading.timestamp or datetime.utcnow()
@@ -74,11 +74,11 @@ def send_sensor_readings(
             "timestamp": timestamp
         })
     
-    if reading.smoke_level is not None:
+    if reading.humidity is not None:
         documents.append({
             "device_id": str(reading.device_id),
-            "sensor_type": "smoke_level",
-            "value": reading.smoke_level,
+            "sensor_type": "humidity",
+            "value": reading.humidity,
             "unit": "%",
             "location": reading.location,
             "timestamp": timestamp
@@ -137,7 +137,7 @@ def get_device_readings(
     **Autenticación requerida:** JWT de Usuario/Admin/Gerente
     
     **Parámetros de consulta:**
-    - sensor_type: Filtrar por tipo (temperature, smoke_level, battery)
+    - sensor_type: Filtrar por tipo (temperature, humidity, battery)
     - start_date: Fecha de inicio (ISO 8601)
     - end_date: Fecha de fin (ISO 8601)
     - limit: Máximo de registros (default: 100, max: 1000)
@@ -156,7 +156,7 @@ def get_device_readings(
     query_filter = {"device_id": str(device_id)}
     
     if sensor_type:
-        valid_types = ["temperature", "smoke_level", "battery"]
+        valid_types = ["temperature", "humidity", "battery"]
         if sensor_type not in valid_types:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

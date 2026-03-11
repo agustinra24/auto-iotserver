@@ -1,13 +1,13 @@
 -- =============================================================================
--- Plataforma de Prevención de Incendios - Inicialización de Base de Datos
+-- Plataforma IoT - Inicialización de Base de Datos
 -- Generado por el Instalador de Plataforma IoT v2.3
 -- =============================================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-CREATE DATABASE IF NOT EXISTS `fire_preventionf` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `fire_preventionf`;
+CREATE DATABASE IF NOT EXISTS `iot_platform` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `iot_platform`;
 
 -- =============================================================================
 -- TABLAS: Sistema RBAC
@@ -305,19 +305,19 @@ INSERT INTO `pasadmin` (`id`, `hashed_password`, `encryption_key`) VALUES
 INSERT INTO `admin` (`id`, `nombre`, `email`, `rol_id`, `pasadmin_id`) VALUES
 (1, 'Admin Master', '{{ADMIN_EMAIL}}', 1, 1);
 
--- Manager: gerente@fire.com / password123 (usuario de prueba)
+-- Manager: gerente@iot-platform.local / password123 (usuario de prueba)
 INSERT INTO `pasgerente` (`id`, `hashed_password`, `encryption_key`) VALUES
 (1, '{{MANAGER_PASSWORD_HASH}}', NULL);
 
 INSERT INTO `gerente` (`id`, `nombre`, `email`, `admin_id`, `pasgerente_id`, `rol_id`) VALUES
-(1, 'Gerente Principal', 'gerente@fire.com', 1, 1, 4);
+(1, 'Gerente Principal', 'gerente@iot-platform.local', 1, 1, 4);
 
--- User: user@fire.com / password123 (usuario de prueba)
+-- User: user@iot-platform.local / password123 (usuario de prueba)
 INSERT INTO `pasusuario` (`id`, `hashed_password`, `encryption_key`) VALUES
 (1, '{{USER_PASSWORD_HASH}}', NULL);
 
 INSERT INTO `usuario` (`id`, `nombre`, `email`, `rol_id`, `is_active`, `pasusuario_id`) VALUES
-(1, 'Usuario Test', 'user@fire.com', 3, 1, 1);
+(1, 'Usuario Test', 'user@iot-platform.local', 3, 1, 1);
 
 -- Device: sensor-test-001 / TEST_DEVICE_API_KEY_32_CHARS_XX
 INSERT INTO `pasdispositivo` (`id`, `api_key`, `encryption_key`) VALUES

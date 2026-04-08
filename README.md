@@ -1,6 +1,6 @@
 # Plataforma IoT con Seguridad Integrada
 
-**V1.1** | Instalador Automatizado para Debian 13
+**V1.2** | Instalador Automatizado para Debian 13
 
 Sistema completo de monitoreo IoT con autenticación criptográfica de dispositivos, gestión de usuarios multinivel y almacenamiento distribuido de datos de sensores.
 
@@ -187,23 +187,32 @@ iot-platform/
 ├── fastapi-app/                # Código fuente de la aplicación
 │   ├── app.py                  # Punto de entrada
 │   ├── core/                   # Seguridad, configuración, criptografía
-│   ├── models/                 # 14 modelos SQLAlchemy
+│   ├── models/                 # 13 modelos SQLAlchemy
 │   ├── schemas/                # Validación Pydantic
 │   ├── api/v1/routers/         # Endpoints REST
 │   └── database/               # Gestores de MySQL y MongoDB
 ├── mysql-init/
-│   └── init.sql                # Esquema de base de datos (14 tablas)
+│   └── init.sql                # Esquema de base de datos (16 tablas)
 ├── nginx/
 │   ├── nginx.conf              # Configuración principal
 │   └── conf.d/
 │       └── iot-api.conf        # Site config con rate limiting
-├── device-firmware-micropython/ # Firmware legacy del dispositivo (referencia)
+├── device-firmware-micropython/ # Firmware MicroPython para ESP32
 │   ├── main.py                 # Punto de entrada del firmware
-│   ├── Config.py               # Configuracion del dispositivo
-│   ├── Device.py               # Clase principal del dispositivo
-│   ├── Authentication.py       # Modulo de autenticacion
-│   ├── WifiControl.py          # Gestion de conectividad WiFi
-│   └── ...                     # Sensores, comunicacion HTTP, cifrado AES
+│   ├── Device.py               # Orquestador: sensores, actuadores, auth, telemetria
+│   ├── config_manager.py       # Carga config.json, validacion, provisioning UART
+│   ├── config.json             # Template de configuracion (placeholders)
+│   ├── puzzle_auth.py          # Autenticacion puzzle HMAC-SHA256 + AES-256-CBC
+│   ├── http_client.py          # Cliente HTTP con JWT Bearer, retry, backoff
+│   ├── hmac_sha256.py          # HMAC-SHA256 manual (RFC 2104)
+│   ├── aes256.py               # AES-256-CBC compatible con crypto_new.py
+│   ├── WifiControl.py          # WiFi STA con reconexion automatica
+│   ├── actuator_logic.py       # Logica local de actuadores (umbrales)
+│   ├── temperature_sensor.py   # Sensor DHT11 (GPIO 32)
+│   ├── microphone_sensor.py    # Sensor MAX4466 (GPIO 34)
+│   ├── led_semaphore.py        # LED semaforo RGB (GPIO 21/22/23)
+│   ├── IR_send.py              # Emisor infrarrojo (GPIO 13)
+│   └── compute_server_key.py   # Helper para derivar server_key
 └── logs/                       # Registros de todos los servicios
     ├── mysql/
     ├── mongodb/
@@ -367,7 +376,7 @@ Parámetros de consulta disponibles:
 
 ### Esquema Relacional (MySQL)
 
-El sistema implementa RBAC (Role-Based Access Control) con 14 tablas:
+El sistema implementa RBAC (Role-Based Access Control) con 16 tablas:
 
 **Entidades principales:**
 
@@ -385,6 +394,10 @@ El sistema implementa RBAC (Role-Based Access Control) con 14 tablas:
 **Seguridad:**
 
 - `pasusuario`, `pasgerente`, `pasadmin`, `pasdispositivo`: almacenamiento aislado de credenciales.
+
+**Relaciones:**
+
+- `servicio_dispositivo`, `servicio_app`, `usuario_servicio`: tablas de unión para asignaciones muchos a muchos entre servicios, dispositivos, aplicaciones y usuarios.
 
 Las contraseñas se hashean con Argon2id usando parámetros resistentes a ataques GPU:
 
@@ -647,11 +660,29 @@ Revisar primero la arquitectura existente y verificar la compatibilidad con el e
 
 ## Firmware del Dispositivo (MicroPython)
 
-El directorio `device-firmware-micropython/` contiene la implementacion original del firmware del dispositivo IoT en MicroPython. Este firmware se desarrolló como prototipo funcional previo a la migracion a C sobre ESP-IDF y se conserva como referencia historica dentro de la plataforma.
+El directorio `device-firmware-micropython/` contiene el firmware funcional para dispositivos ESP32 con MicroPython (v1.20+). Este firmware implementa el mismo protocolo de autenticación por puzzle criptográfico que la API espera (HMAC-SHA256 + AES-256-CBC) y se comunica con el servidor usando tokens JWT Bearer.
 
-Durante la instalacion, el firmware se copia automaticamente a `iot-platform/device-firmware-micropython/` para que el administrador del servidor pueda flashear dispositivos ESP32 directamente desde la plataforma desplegada.
+Durante la instalación, el firmware se copia automáticamente a `iot-platform/device-firmware-micropython/` para que el administrador del servidor pueda flashear dispositivos ESP32 directamente desde la plataforma desplegada.
 
-El firmware incluye: autenticacion criptografica con el servidor (AES-256), gestion de conectividad WiFi, lectura de sensores (temperatura, microfono), comunicacion HTTP para envio de telemetria y control de actuadores (LED, infrarrojo).
+### Capacidades del firmware
+
+- Autenticación por puzzle criptográfico: HMAC-SHA256 + AES-256-CBC, compatible byte-a-byte con `crypto_new.py` del servidor
+- Sesiones JWT Bearer con re-autenticación automática al expirar el token
+- Envío de telemetría (temperatura, humedad) como JSON a `POST /api/v1/device/reading`
+- Reconexión WiFi automática con backoff exponencial
+- Sincronización de reloj vía NTP para timestamps ISO 8601
+- Actuadores locales: LED semáforo (rojo/amarillo/verde según nivel de ruido) y emisor infrarrojo
+- Configuración desde archivo `config.json` en flash, con modo de provisioning interactivo por UART si no existe
+- Datos simulados cuando los sensores físicos no están conectados
+
+### Provisionamiento del dispositivo
+
+1. Flashear MicroPython al ESP32 con esptool
+2. Subir todos los archivos `.py` y `config.json` con mpremote o ampy
+3. Editar `config.json` con las credenciales del dispositivo (device_id, api_key, device_key, server_key, WiFi)
+4. El `server_key` se obtiene ejecutando `compute_server_key.py` con el SECRET_KEY del servidor
+
+Hardware soportado: ESP32-WROOM-32D con sensores DHT11 (GPIO 32), MAX4466 (GPIO 34), LED RGB (GPIO 21/22/23), IR (GPIO 13).
 
 ---
 
@@ -689,5 +720,5 @@ sudo docker logs iot-mongodb --tail=100
 
 ---
 
-**V1.1** | Marzo 2026
+**V1.2** | Abril 2026
 Plataforma IoT con Seguridad Integrada

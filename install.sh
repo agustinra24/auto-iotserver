@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Plataforma IoT con Seguridad Integrada - Instalador Automatizado v1.1
+# Plataforma IoT con Seguridad Integrada - Instalador Automatizado v1.2
 #
 # Requisitos: Debian 13 (Trixie) limpio, acceso root/sudo
 # Ejecución: sudo ./install.sh [--dry-run] [--resume]

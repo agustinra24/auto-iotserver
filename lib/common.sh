@@ -14,7 +14,7 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # Version de la plataforma (unico punto de cambio para codigo ejecutable)
-PLATFORM_VERSION="1.1"
+PLATFORM_VERSION="1.2"
 
 # Funciones de logging
 log_info() {

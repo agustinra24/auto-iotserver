@@ -1,0 +1,19 @@
+{
+    "device_id": 1,
+    "api_key": "REPLACE_WITH_YOUR_32_CHAR_API_KEY",
+    "device_key_hex": "REPLACE_WITH_64_HEX_CHARS_FROM_SERVER",
+    "server_key_hex": "REPLACE_WITH_64_HEX_CHARS_COMPUTED_BY_ADMIN",
+    "server_url": "http://192.168.1.100",
+    "server_port": 5000,
+    "wifi_ssid": "YourNetworkSSID",
+    "wifi_pass": "YourNetworkPassword",
+    "read_interval_s": 30,
+    "location": "Lab-01",
+    "thresholds": {
+        "temp_high": 35.0,
+        "temp_low": 18.0,
+        "humidity_high": 80,
+        "noise_high_v": 2.5,
+        "noise_medium_v": 2.0
+    }
+}

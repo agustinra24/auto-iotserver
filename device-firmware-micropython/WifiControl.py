@@ -1,59 +1,129 @@
 """
-This class is used to connect the ESP32 to a Wi-Fi network.
-It uses the MicroPython `network` module to establish a connection in STA mode (Station Mode).
+Wi-Fi connectivity manager for ESP32 MicroPython.
+
+Connects the device in STA mode (Station Mode) to an existing network.
+Provides automatic reconnection, connection health checks, and retry
+with exponential backoff on initial connection.
+
+Original authors: Raziel Campos, Jose Zapata, Alejandro Salinas.
+Updated: Agustin Ahumada (reconnection, backoff, health checks).
 """
 
-import network  # Import the network module for Wi-Fi functionality
-import time  # Import the time module for delays
-import Config  # Import a custom configuration file where SSID and password are stored
+import network
+import time
+
 
 class Wifi:
-    """
-    A class to manage Wi-Fi connectivity on an ESP32 device.
-    """
+    """Manages Wi-Fi connectivity with reconnection support."""
 
-    def __init__(self, wifi_ssid, wifi_password):
+    def __init__(self, wifi_ssid: str, wifi_password: str):
         """
-        Initialize the Wi-Fi class with credentials from the Config module.
+        Parameters:
+            wifi_ssid:     Network SSID to connect to.
+            wifi_password: Network password.
         """
-        self.ssid = wifi_ssid  # Retrieve Wi-Fi SSID (network name) from Config
-        self.password = wifi_password  # Retrieve Wi-Fi password from Config
-        self.status = False  # Track connection status (False = Not Connected)
+        self.ssid = wifi_ssid
+        self.password = wifi_password
+        self.wlan = network.WLAN(network.STA_IF)
+        self.wlan.active(True)
 
-    def connect_wifi(self):
+    def is_connected(self) -> bool:
+        """Check if Wi-Fi is currently connected."""
+        return self.wlan.isconnected()
+
+    def get_ip(self) -> str:
+        """Return the assigned IP address, or empty string if not connected."""
+        if self.wlan.isconnected():
+            return self.wlan.ifconfig()[0]
+        return ""
+
+    def connect(self, timeout: int = 15) -> bool:
         """
-        Connect to the specified Wi-Fi network and handle possible errors.
+        Connect to the configured Wi-Fi network.
+
+        Parameters:
+            timeout: Maximum seconds to wait for connection.
+
+        Returns:
+            True if connected, False on timeout.
         """
-        print('Connecting to Wi-Fi ... ... ...')  # Notify user that connection is in progress
+        if self.wlan.isconnected():
+            print("[wifi] Already connected: {}".format(self.wlan.ifconfig()[0]))
+            return True
+
+        print("[wifi] Connecting to '{}'...".format(self.ssid))
 
         try:
-            # Create a Wi-Fi station interface (STA mode: Connect to an existing network)
-            wlan = network.WLAN(network.STA_IF)  # Create a WLAN object in STA mode
-            wlan.active(True)  # Activate the Wi-Fi interface
+            self.wlan.connect(self.ssid, self.password)
 
-            # Check if the device is already connected
-            if wlan.isconnected():
-                print("The device is already connected:", wlan.ifconfig())  # Print current IP configuration
-                self.status = True  # Update connection status
-                return  # Exit the function since we are already connected
+            start = time.time()
+            while not self.wlan.isconnected():
+                if time.time() - start > timeout:
+                    print("[wifi] Timeout after {}s".format(timeout))
+                    return False
+                time.sleep(1)
 
-            # Attempt to connect using stored credentials
-            wlan.connect(self.ssid, self.password)
+            print("[wifi] Connected: {}".format(self.wlan.ifconfig()[0]))
+            return True
 
-            # Define a timeout limit to prevent infinite waiting
-            timeout = 10  # Maximum time (in seconds) to wait for connection
-            start_time = time.time()  # Record the current time
+        except OSError as e:
+            print("[wifi] Connection error: {}".format(e))
+            return False
 
-            # Wait for the connection to establish or until timeout occurs
-            while not wlan.isconnected():
-                if time.time() - start_time > timeout:  # Check if timeout is exceeded
-                    print("Error: Timeout, the device was not able to connect.")  # Notify failure
-                    return  # Exit function if connection fails
-                time.sleep(1)  # Small delay to prevent excessive CPU usage
+    def connect_with_retry(self, max_attempts: int = 3) -> bool:
+        """
+        Connect with exponential backoff retries.
 
-            # Successfully connected
-            print("Connected to:", wlan.ifconfig())  # Print assigned IP configuration
-            self.status = True  # Update connection status to True
+        Timeouts per attempt: 15s, 20s, 30s.
 
-        except Exception as e:
-            print("Error to establish connection to Wi-Fi:", e)  # Print any exception that occurs
+        Parameters:
+            max_attempts: Maximum connection attempts (default 3).
+
+        Returns:
+            True if connected on any attempt, False if all failed.
+        """
+        backoff_timeouts = [15, 20, 30]
+
+        for attempt in range(max_attempts):
+            timeout = backoff_timeouts[min(attempt, len(backoff_timeouts) - 1)]
+            print("[wifi] Attempt {}/{}".format(attempt + 1, max_attempts))
+
+            if self.connect(timeout=timeout):
+                return True
+
+            if attempt < max_attempts - 1:
+                wait = (attempt + 1) * 10  # 10s, 20s, 30s between attempts
+                print("[wifi] Retrying in {}s...".format(wait))
+                time.sleep(wait)
+
+        print("[wifi] All {} connection attempts failed".format(max_attempts))
+        return False
+
+    def reconnect(self) -> bool:
+        """
+        Reconnect after a connection drop.
+
+        Deactivates and reactivates the interface before retrying,
+        which clears stale connection state in the ESP32 Wi-Fi driver.
+
+        Returns:
+            True if reconnected, False if all retries failed.
+        """
+        print("[wifi] Reconnecting...")
+
+        # Reset the interface to clear stale state
+        try:
+            self.wlan.disconnect()
+        except OSError:
+            pass
+        self.wlan.active(False)
+        time.sleep(1)
+        self.wlan.active(True)
+        time.sleep(1)
+
+        return self.connect_with_retry()
+
+    # Legacy alias for backward compatibility with Device.py
+    def connect_wifi(self):
+        """Legacy method. Use connect_with_retry() instead."""
+        return self.connect_with_retry()

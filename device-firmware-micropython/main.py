@@ -1,64 +1,39 @@
 """
-This is the main script to run the IoT project.
+Main entry point for the IoT device firmware.
 
+Boot sequence:
+    1. Load configuration from /config.json (or enter UART provisioning)
+    2. Initialize Wi-Fi, NTP, sensors, actuators, and puzzle authentication
+    3. Enter telemetry loop: read sensors -> evaluate actuators -> send data
 
 Authors:
-    -- Raziel Campos
-    -- Jose Zapata
-    -- Alejandro Salinas
+    -- Raziel Campos (original)
+    -- Jose Zapata (original)
+    -- Alejandro Salinas (original crypto, sensors)
+    -- Agustin Ahumada (puzzle auth, JWT, API adaptation)
 """
 
+import config_manager
 from Device import DeviceIoT
-# TODO: Move the http class to device, enhance the control phases ...
-from http_communication import HttpCommunication
-import Config
-import json
-import hashlib
-import time
-from Authentication3 import Authentication3
-from Processing_data import ProcessingData
+
 
 def main():
-    # The object initialization is once per run
-    device = DeviceIoT()
-    device.initialize()
-    #Getting AES Key
-    key = hashlib.sha256(Config.AES_Password.encode()).digest()[:16]  # AES-128 key
+    # Step 1: Load and validate configuration
+    config = config_manager.load()
 
-    ## Authentication Logging
-    auth = Authentication3(username=Config.User_Name, password=Config.Password,
-                           login_url=Config.End_Point + "devices/auth")
-    token = auth.get_session_token()
-    print(f" ******** the current token is: {token} **********")
+    # Step 2: Initialize the device (Wi-Fi, NTP, sensors, auth)
+    device = DeviceIoT(config)
+    if not device.initialize():
+        print("[main] Initialization failed. Halting.")
+        return
 
-    ### _____ Classes to initialize _______
-    # the http communication object
-    http_object = HttpCommunication(data_send_endpoint=Config.End_Point + "devices/add_data", token=token)
-    ### Processing data class
-    actions_actuators = ProcessingData(esp32=device)
-
-    while True:
-        start_time = time.time() # measurement the delta time
-
-        # get measurements and send data
-        noise, humidity, temperature = device.get_measurements(samples=3)
-        data_packet = http_object.data_structure(id_device="ESP32", timestamp="12:12:12", msm1=temperature, msm2=humidity,
-                                                 msm3=noise)
-        print("The data Packet is:", data_packet)
-        data_packet = data_packet.encode() # bytes
-        data_response = http_object.send_data_encrypted(data_packet, key)
-
-        print("data_response:", data_response)
-        plain_data = http_object.received_data_encrypted(data_response, key)
-        print("data_response decrypted:", plain_data)
-
-        actions_actuators.semaphore_action(plain_data)
-        actions_actuators.fan_action(plain_data)
-
-        t = time.time() - start_time
-        print(f"It takes to gather, send and receive a response in: {str(t)} [s]" )
+    # Step 3: Enter the telemetry loop (runs indefinitely)
+    device.run()
 
 
-if __name__ == '__main__':
-    print("*********** This is the main process ***********")
+if __name__ == "__main__":
+    print("=" * 50)
+    print("  IoT Device Firmware v2.0")
+    print("  Puzzle Auth + FastAPI compatible")
+    print("=" * 50)
     main()

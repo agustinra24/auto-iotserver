@@ -63,7 +63,7 @@ phase_0_preparation() {
     
     if [[ "$DRY_RUN" != true ]]; then
         mkdir -p "$install_dir"
-        mkdir -p "$install_dir"/{logs,mysql-data,mysql-init,mongo-data,redis-data,nginx,fastapi-app}
+        mkdir -p "$install_dir"/{logs,mysql-data,mysql-init,mongo-data,redis-data,nginx,fastapi-app,device-firmware-micropython}
         mkdir -p "$install_dir/nginx/conf.d"
         mkdir -p "$install_dir/nginx/ssl"
         mkdir -p "$install_dir/logs"/{mysql,mongodb,redis,fastapi,nginx}
@@ -716,7 +716,8 @@ phase_8_fastapi_app() {
     log_info "Iniciando Fase 8: Aplicación FastAPI"
     
     source "$CONFIG_FILE"
-    local app_dir="$INSTALL_DIR/fastapi-app"
+    local install_dir="$INSTALL_DIR"
+    local app_dir="$install_dir/fastapi-app"
     
     show_task "Copiando código de aplicación" "running"
     if [[ "$DRY_RUN" != true ]]; then
@@ -743,7 +744,20 @@ phase_8_fastapi_app() {
         touch "$app_dir/api/v1/routers/__init__.py"
     fi
     complete_task "Estructura de paquetes creada"
-    
+
+    show_task "Copiando firmware MicroPython de referencia" "running"
+    local firmware_src="$SCRIPT_DIR/device-firmware-micropython"
+    if [[ -d "$firmware_src" ]]; then
+        if [[ "$DRY_RUN" != true ]]; then
+            cp -r "$firmware_src/"* "$install_dir/device-firmware-micropython/"
+            chown -R "$NEW_USERNAME:$NEW_USERNAME" "$install_dir/device-firmware-micropython"
+            chmod -R 755 "$install_dir/device-firmware-micropython"
+        fi
+        complete_task "Firmware MicroPython copiado"
+    else
+        log_warning "Directorio de firmware no encontrado, omitiendo: $firmware_src"
+    fi
+
     log_success "Fase 8 completada"
 }
 

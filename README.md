@@ -197,13 +197,18 @@ iot-platform/
 │   ├── nginx.conf              # Configuración principal
 │   └── conf.d/
 │       └── iot-api.conf        # Site config con rate limiting
+├── device-firmware-micropython/ # Firmware legacy del dispositivo (referencia)
+│   ├── main.py                 # Punto de entrada del firmware
+│   ├── Config.py               # Configuracion del dispositivo
+│   ├── Device.py               # Clase principal del dispositivo
+│   ├── Authentication.py       # Modulo de autenticacion
+│   ├── WifiControl.py          # Gestion de conectividad WiFi
+│   └── ...                     # Sensores, comunicacion HTTP, cifrado AES
 └── logs/                       # Registros de todos los servicios
     ├── mysql/
     ├── mongodb/
     ├── redis/
     ├── fastapi/
-    │   └── sessions/
-    │       └── sessions_history.csv
     └── nginx/
 ```
 
@@ -637,6 +642,16 @@ Para proponer cambios:
 5. Abrir Pull Request con descripción detallada
 
 Revisar primero la arquitectura existente y verificar la compatibilidad con el esquema de autenticación actual.
+
+---
+
+## Firmware del Dispositivo (MicroPython)
+
+El directorio `device-firmware-micropython/` contiene la implementacion original del firmware del dispositivo IoT en MicroPython. Este firmware se desarrolló como prototipo funcional previo a la migracion a C sobre ESP-IDF y se conserva como referencia historica dentro de la plataforma.
+
+Durante la instalacion, el firmware se copia automaticamente a `iot-platform/device-firmware-micropython/` para que el administrador del servidor pueda flashear dispositivos ESP32 directamente desde la plataforma desplegada.
+
+El firmware incluye: autenticacion criptografica con el servidor (AES-256), gestion de conectividad WiFi, lectura de sensores (temperatura, microfono), comunicacion HTTP para envio de telemetria y control de actuadores (LED, infrarrojo).
 
 ---
 

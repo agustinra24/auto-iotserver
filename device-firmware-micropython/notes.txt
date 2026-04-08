@@ -1,0 +1,40 @@
+print("Hola mundo")
+esptool.py erase_flash
+0x1000
+esptool.py --baud 460800 write_flash 0x1000 ESP32_BOARD_NAME-DATE-VERSION.bin
+
+INICIALIZAR LAS ZONAS
+COMO SE CONSTRUYEN LOS COMMANDOS
+
+
+esptool.py --port /dev/ttyUSB0 erase_flash
+esptool.py --port /dev/ttyUSB0 --baud 460800 write_flash 0x1000 ESP32_GENERIC-20241129-v1.24.1.bin
+
+
+_________________________________
+print("Hola a todos")
+print("This is my first script in micropython")
+import machine
+import time
+pin = machine.Pin(2, machine.Pin.OUT)
+while True:
+    print("ON")
+    pin.value(1)
+    time.sleep(1)
+    print("OFF")
+    pin.value(0)
+    time.sleep(1)
+
+# hola
+____________________________________________
+Other commands
+import machine
+led = machine.Pin(2, machine.Pin.OUT)
+led.on()
+led.value()
+led.off()
+
+
+___________________________
+Fundamental information
+

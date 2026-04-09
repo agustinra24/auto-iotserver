@@ -96,6 +96,12 @@ server {
         proxy_set_header Connection "";
     }
     
+    # Web Flasher - Herramienta de provisionamiento ESP32
+    location /flasher/ {
+        alias /usr/share/nginx/web-flasher/;
+        index index.html;
+    }
+
     # Bloquear archivos sensibles
     location ~ /\. {
         deny all;

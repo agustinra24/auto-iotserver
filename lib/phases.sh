@@ -63,7 +63,7 @@ phase_0_preparation() {
     
     if [[ "$DRY_RUN" != true ]]; then
         mkdir -p "$install_dir"
-        mkdir -p "$install_dir"/{logs,mysql-data,mysql-init,mongo-data,redis-data,nginx,fastapi-app,device-firmware-micropython}
+        mkdir -p "$install_dir"/{logs,mysql-data,mysql-init,mongo-data,redis-data,nginx,fastapi-app,device-firmware-micropython,web-flasher}
         mkdir -p "$install_dir/nginx/conf.d"
         mkdir -p "$install_dir/nginx/ssl"
         mkdir -p "$install_dir/logs"/{mysql,mongodb,redis,fastapi,nginx}
@@ -756,6 +756,19 @@ phase_8_fastapi_app() {
         complete_task "Firmware MicroPython copiado"
     else
         log_warning "Directorio de firmware no encontrado, omitiendo: $firmware_src"
+    fi
+
+    show_task "Copiando Web Flasher de provisionamiento" "running"
+    local flasher_src="$SCRIPT_DIR/web-flasher"
+    if [[ -d "$flasher_src" ]]; then
+        if [[ "$DRY_RUN" != true ]]; then
+            cp -r "$flasher_src/"* "$install_dir/web-flasher/"
+            chown -R "$NEW_USERNAME:$NEW_USERNAME" "$install_dir/web-flasher"
+            chmod -R 755 "$install_dir/web-flasher"
+        fi
+        complete_task "Web Flasher copiado"
+    else
+        log_warning "Directorio de Web Flasher no encontrado, omitiendo: $flasher_src"
     fi
 
     log_success "Fase 8 completada"

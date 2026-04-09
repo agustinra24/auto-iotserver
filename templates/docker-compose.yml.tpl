@@ -175,6 +175,7 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./web-flasher:/usr/share/nginx/web-flasher:ro
       - ./logs/nginx:/var/log/nginx
     networks:
       iot-network:

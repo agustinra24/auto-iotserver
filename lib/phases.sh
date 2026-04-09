@@ -784,6 +784,8 @@ phase_9_mysql_init() {
             -e "s|{{USER_PASSWORD_HASH}}|$USER_PASSWORD_HASH|g" \
             -e "s|{{MANAGER_PASSWORD_HASH}}|$MANAGER_PASSWORD_HASH|g" \
             -e "s|{{ADMIN_EMAIL}}|$admin_email|g" \
+            -e "s|{{DEVICE_API_KEY}}|$DEVICE_API_KEY|g" \
+            -e "s|{{DEVICE_ENCRYPTION_KEY}}|$DEVICE_ENCRYPTION_KEY|g" \
             "$SCRIPT_DIR/templates/mysql-init.sql.tpl" > "$install_dir/mysql-init/init.sql"
     fi
     complete_task "Script de inicialización MySQL creado"

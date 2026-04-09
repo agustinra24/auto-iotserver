@@ -40,11 +40,12 @@ def create_device(
         return ResponseFormatter.error("Administrador no encontrado")
     
     # Crear pasdispositivo con api_key y encryption_key auto-generados
+    # api_key se genera automaticamente en PasDispositivo.__init__ (32 chars alfanumericos)
     pas = PasDispositivo()
     pas.encryption_key = secrets.token_bytes(32)  # 32 bytes para AES-256
     db.add(pas)
     db.flush()
-    
+
     device = Device(
         nombre=payload.nombre,
         device_type=payload.device_type,
@@ -55,8 +56,18 @@ def create_device(
     db.add(device)
     db.commit()
     db.refresh(device)
-    
-    return ResponseFormatter.success(device, "Dispositivo creado exitosamente")
+
+    # Incluir credenciales en la respuesta para que el admin pueda provisionar el ESP32.
+    # Estas credenciales solo se muestran una vez (al crear el dispositivo).
+    result = {
+        "device_id": device.id,
+        "nombre": device.nombre,
+        "device_type": device.device_type,
+        "is_active": device.is_active,
+        "api_key": pas.api_key,
+        "encryption_key_hex": pas.encryption_key.hex()
+    }
+    return ResponseFormatter.success(result, "Dispositivo creado exitosamente")
 
 
 @router.get("/")

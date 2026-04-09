@@ -319,9 +319,9 @@ INSERT INTO `pasusuario` (`id`, `hashed_password`, `encryption_key`) VALUES
 INSERT INTO `usuario` (`id`, `nombre`, `email`, `rol_id`, `is_active`, `pasusuario_id`) VALUES
 (1, 'Usuario Test', 'user@iot-platform.local', 3, 1, 1);
 
--- Device: sensor-test-001 / TEST_DEVICE_API_KEY_32_CHARS_XX
+-- Device: sensor-test-001 (credenciales generadas por el installer)
 INSERT INTO `pasdispositivo` (`id`, `api_key`, `encryption_key`) VALUES
-(1, 'TEST_DEVICE_API_KEY_32_CHARS_XX', UNHEX('0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'));
+(1, '{{DEVICE_API_KEY}}', UNHEX('{{DEVICE_ENCRYPTION_KEY}}'));
 
 INSERT INTO `dispositivo` (`id`, `nombre`, `device_type`, `is_active`, `admin_id`, `pasdispositivo_id`) VALUES
 (1, 'sensor-test-001', 'temperatura', 1, 1, 1);

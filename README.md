@@ -677,10 +677,29 @@ Durante la instalación, el firmware se copia automáticamente a `iot-platform/d
 
 ### Provisionamiento del dispositivo
 
+**Opcion recomendada: Web Flasher** (`web-flasher/index.html`)
+
+Herramienta grafica en navegador (Chrome/Edge) que automatiza todo el proceso de despliegue:
+
+1. Diagnostico del chip ESP32 (modelo, MAC, flash)
+2. Flash de MicroPython v1.25.0 con borrado de flash
+3. Subida de los 14 modulos .py del firmware via Raw REPL
+4. Configuracion por drag-and-drop de config.json (generado por `compute_server_key.py`) o formulario manual
+5. Monitor serial en tiempo real con filtro, timestamps y deteccion automatica de errores
+6. Gestion post-provisionamiento: lectura/edicion de config, explorador de archivos, actualizacion quirurgica
+
+Incluye escaneo de redes WiFi del ESP32, reporte de provisionamiento descargable, codigo QR para etiquetado de dispositivos, y documentacion integrada del firmware. Ver `web-flasher/README.md` para documentacion tecnica completa.
+
+```bash
+cd web-flasher && python3 -m http.server 8080
+# Abrir http://localhost:8080 en Chrome
+```
+
+**Opcion alternativa: linea de comandos**
+
 1. Flashear MicroPython al ESP32 con esptool
-2. Subir todos los archivos `.py` y `config.json` con mpremote o ampy
-3. Editar `config.json` con las credenciales del dispositivo (device_id, api_key, device_key, server_key, WiFi)
-4. El `server_key` se obtiene ejecutando `compute_server_key.py` con el SECRET_KEY del servidor
+2. Generar config.json: `uv run device-firmware-micropython/compute_server_key.py`
+3. Subir archivos con mpremote: `mpremote cp device-firmware-micropython/*.py :`
 
 Hardware soportado: ESP32-WROOM-32D con sensores DHT11 (GPIO 32), MAX4466 (GPIO 34), LED RGB (GPIO 21/22/23), IR (GPIO 13).
 

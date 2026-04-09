@@ -46,7 +46,11 @@ generate_all_secrets() {
     # Generar claves de cifrado de dispositivo
     export DEVICE_ENCRYPTION_KEY
     DEVICE_ENCRYPTION_KEY=$(openssl rand -hex 32)
-    
+
+    # Generar API key del dispositivo inicial
+    export DEVICE_API_KEY
+    DEVICE_API_KEY=$(generate_device_api_key 32)
+
     # Guardar en archivo
     cat > "$SECRETS_FILE" << EOF
 # Secretos de Plataforma IoT
@@ -64,6 +68,9 @@ SECRET_KEY="$SECRET_KEY"
 
 # Clave de Cifrado de Dispositivo (32 bytes hex)
 DEVICE_ENCRYPTION_KEY="$DEVICE_ENCRYPTION_KEY"
+
+# API Key del dispositivo inicial (sensor-test-001)
+DEVICE_API_KEY="$DEVICE_API_KEY"
 
 # Algoritmos
 ALGORITHM="HS256"

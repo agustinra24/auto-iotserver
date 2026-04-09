@@ -397,47 +397,45 @@ body::before {
 /* ================================================================
    TERMINAL
    ================================================================ */
-.terminal {
-  background: #06060a;
+.terminal-wrap {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--radius-sm);
-  padding: 2.25rem 1rem 1rem;
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
-  line-height: 1.55;
-  color: #b0b0c8;
-  max-height: 400px;
-  min-height: 200px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
+  overflow: hidden;
   margin-top: 0.5rem;
-  position: relative;
+  background: #06060a;
 }
 
-/* Terminal title bar with traffic lights */
-.terminal::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+.terminal-titlebar {
   height: 1.75rem;
   background: rgba(255,255,255,0.025);
   border-bottom: 1px solid rgba(255,255,255,0.04);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  display: flex;
+  align-items: center;
+  padding-left: 0.85rem;
+  flex-shrink: 0;
 }
 
-.terminal::after {
-  content: '';
-  position: absolute;
-  top: 0.6rem;
-  left: 0.85rem;
+.terminal-dots {
+  display: block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: #ff5f57;
   box-shadow: 14px 0 0 #febc2e, 28px 0 0 #28c840;
+}
+
+.terminal {
+  background: #06060a;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: #b0b0c8;
+  max-height: 370px;
+  min-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .terminal .log-line { display: block; }
@@ -1566,7 +1564,10 @@ esp-web-install-button::part(button):hover {
       <svg class="icon" viewBox="0 0 24 24" style="width:0.85rem;height:0.85rem;stroke:var(--text-muted);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="monFilterInput" placeholder="Filtrar lineas (texto o /regex/)" oninput="applyFilter()">
     </div>
-    <div class="terminal" id="serialConsole" role="log" aria-live="polite"></div>
+    <div class="terminal-wrap">
+      <div class="terminal-titlebar"><span class="terminal-dots"></span></div>
+      <div class="terminal" id="serialConsole" role="log" aria-live="polite"></div>
+    </div>
 
     <div class="redis-alert" id="redisAlert" role="alert">
       <div class="redis-alert__title">
@@ -1787,13 +1788,14 @@ var firmwareLoaded = false;
 
 async function loadFirmwareFiles() {
   if (firmwareLoaded) return FIRMWARE_FILES;
-  var resp = await fetch('firmware/files/manifest.json');
+  var timeout = 15000;
+  var resp = await fetch('firmware/files/manifest.json', { signal: AbortSignal.timeout(timeout) });
   if (!resp.ok) throw new Error('No se pudo cargar el manifest de firmware: HTTP ' + resp.status);
   var manifest = await resp.json();
   var files = manifest.files || [];
   for (var i = 0; i < files.length; i++) {
     var name = files[i];
-    var fResp = await fetch('firmware/files/' + name);
+    var fResp = await fetch('firmware/files/' + name, { signal: AbortSignal.timeout(timeout) });
     if (!fResp.ok) throw new Error('No se pudo cargar ' + name + ': HTTP ' + fResp.status);
     FIRMWARE_FILES[name] = await fResp.text();
   }
@@ -2101,6 +2103,7 @@ async function uploadFiles() {
     return;
   }
   await suspendMonitor();
+  operationInProgress = true;
   const btn = document.getElementById('btnUpload');
   const progressSection = document.getElementById('uploadProgressSection');
   const progressFill = document.getElementById('uploadProgressFill');
@@ -2119,10 +2122,10 @@ async function uploadFiles() {
     showStatus('uploadStatus', 'Error: ' + fwErr.message, 'err');
     btn.disabled = false;
     btn.classList.remove('loading');
+    operationInProgress = false;
     resumeMonitor();
     return;
   }
-  operationInProgress = true;
   hideStatus('uploadStatus');
   resultBox.textContent = '';
   resultBox.style.display = 'none';
@@ -2828,7 +2831,18 @@ async function resumeMonitor() {
   monitorSuspended = false;
   appendLine('[Reanudando monitor...]', 'log-info');
   await sleep(1500);
-  startMonitor();
+  // Use getPorts() instead of requestPort() - no user gesture needed
+  try {
+    var ports = await navigator.serial.getPorts();
+    if (ports.length > 0) {
+      await ports[0].open({ baudRate: 115200 });
+      startMonitor(ports[0]);
+    } else {
+      appendLine('[No se encontro puerto autorizado. Presiona Iniciar.]', 'log-warn');
+    }
+  } catch (e) {
+    appendLine('[No se pudo reconectar: ' + e.message + ']', 'log-warn');
+  }
 }
 
 async function stopMonitor() {

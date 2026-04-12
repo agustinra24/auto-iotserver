@@ -59,7 +59,13 @@ Herramienta de despliegue, configuracion y gestion para firmware IoT en ESP32, e
 
 ### Arquitectura tecnica
 
-Archivo unico: `web-flasher/index.html` (~3500 lineas). Todo el CSS, HTML y JavaScript esta embebido en un solo archivo para maxima portabilidad (se puede servir con cualquier servidor HTTP estatico, incluyendo `python3 -m http.server`).
+Tres archivos separados para mantenibilidad:
+
+- `index.html` (~530 lineas): estructura HTML limpia, sin logica ni estilos embebidos.
+- `styles.css` (~1270 lineas): tema oscuro, glassmorphism, utilidades, responsive.
+- `app.js` (~1880 lineas): logica de aplicacion, comunicacion serial, gestion de estado.
+
+Se puede servir con cualquier servidor HTTP estatico (ej: `python3 -m http.server 8080`). Los archivos de firmware se cargan en runtime desde `firmware/files/`.
 
 **Dependencias externas (CDN):**
 - esptool-js v0.5.7: comunicacion con el bootloader ROM del ESP32
@@ -83,7 +89,7 @@ Archivo unico: `web-flasher/index.html` (~3500 lineas). Todo el CSS, HTML y Java
 
 - Google Chrome o Microsoft Edge (Web Serial API)
 - ESP32-WROOM-32D conectado por USB
-- Servidor HTTP para servir el archivo (ej: `python3 -m http.server 8080`)
+- Servidor HTTP para servir los archivos (ej: `cd web-flasher && python3 -m http.server 8080`)
 
 ### Uso
 

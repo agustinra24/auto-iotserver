@@ -1,6 +1,6 @@
 # Plataforma IoT con Seguridad Integrada
 
-**V1.2** | Instalador Automatizado para Debian 13
+**V1.3** | Instalador Automatizado para Debian 13.x/Trixie y derivados basados en Trixie
 
 Sistema completo de monitoreo IoT con autenticación criptográfica de dispositivos, gestión de usuarios multinivel y almacenamiento distribuido de datos de sensores.
 
@@ -8,7 +8,7 @@ Sistema completo de monitoreo IoT con autenticación criptográfica de dispositi
 
 ## Descripción General
 
-Esta plataforma permite desplegar un ecosistema IoT centralizado con mecanismos de seguridad integrados desde la instalación, siguiendo un enfoque security-first for IoT ecosystems. El instalador automatizado reduce las barreras técnicas de adopción al configurar todas las capas de seguridad, bases de datos y servicios de aplicación sin intervención manual, completando el despliegue en 10 a 15 minutos sobre un servidor Debian 13 limpio.
+Esta plataforma permite desplegar un ecosistema IoT centralizado con mecanismos de seguridad integrados desde la instalación, siguiendo un enfoque security-first for IoT ecosystems. El instalador automatizado reduce las barreras técnicas de adopción al configurar todas las capas de seguridad, bases de datos y servicios de aplicación sin intervención manual. En un servidor Debian 13 limpio con perfil estándar suele completar el despliegue en 10 a 20 minutos; en 2 GB de RAM o almacenamiento compacto puede tardar más.
 
 La arquitectura es agnóstica respecto al escenario de aplicación, lo que permite adaptarla a distintas necesidades operativas sin modificar el núcleo del sistema.
 
@@ -64,7 +64,7 @@ El sistema implementa defensa en profundidad mediante cinco capas consecutivas:
 2. **Fail2Ban**: detección de patrones de ataque en logs y bloqueo automático de IPs maliciosas (5 jails activos).
 3. **Nginx**: proxy inverso con rate limiting por endpoint, headers de seguridad y filtrado de solicitudes sospechosas.
 4. **FastAPI**: validación de tokens JWT, verificación de permisos por rol y sanitización de entradas.
-5. **Aislamiento de red**: las bases de datos solo son accesibles desde la red interna de Docker (172.20.0.0/16).
+5. **Aislamiento de red**: las bases de datos solo son accesibles desde la red interna de Docker configurada durante la instalación.
 
 Ninguna base de datos acepta conexiones desde el host o internet, lo que elimina vectores de ataque directo.
 
@@ -74,21 +74,25 @@ Ninguna base de datos acepta conexiones desde el host o internet, lo que elimina
 
 ### Servidor
 
-- Debian 13 (Trixie) con instalación limpia
-- Mínimo 2 núcleos de CPU y 4 GB de RAM
-- 20 GB de almacenamiento disponible
+- Debian 13.x (Trixie) con instalación limpia o derivado basado en Trixie. Debian 13.4 es compatible.
+- Arquitectura `amd64` o `arm64`
+- El instalador detecta automáticamente el perfil de recursos:
+  - `standard`: 4 GB de RAM nominales y 20 GB libres
+  - `low-resource`: 2 GB de RAM nominales, 4 núcleos recomendados y 20 GB libres; 32 GB o más recomendado
+  - `compact-storage`: 2 GB de RAM nominales, menos de 20 GB libres en `/` y al menos 5 GB libres reales; pensado para laboratorio, demo o cargas IoT livianas con retención limitada
 - Conexión a internet estable
-- Acceso SSH con privilegios sudo
-- Dependencias mínimas instaladas:
+- Acceso root o usuario con `sudo`. En una instalación Debian netinst mínima puede no existir `sudo`; en ese caso entrar con `su -` o consola local y ejecutar el instalador como root.
+- Dependencias mínimas para obtener el repositorio:
 
   ```bash
-  sudo apt update
-  sudo apt install -y git curl openssl bc
+  apt update
+  apt install -y git ca-certificates
   ```
 
 ### Recomendaciones
 
 - Servidor dedicado o VPS con IP pública estática
+- Raspberry Pi OS debe ser 64-bit y basado en Trixie. Raspberry Pi 4/400/CM4 no es compatible con MongoDB 7 porque MongoDB 5.0+ requiere ARMv8.2-A o posterior. El instalador detecta la Pi 4 y pide confirmación explícita para usar `mongo:4.4.30-focal`; no usar ese modo en producción porque MongoDB 4.4 está EOL.
 - Acceso a consola del proveedor como respaldo en caso de problemas con SSH
 - Snapshot o backup del servidor antes de iniciar la instalación
 
@@ -98,12 +102,12 @@ Ninguna base de datos acepta conexiones desde el host o internet, lo que elimina
 
 ### Clonar el Repositorio
 
-Conectar al servidor vía SSH e instalar las dependencias necesarias:
+Conectar al servidor vía SSH o consola local e instalar lo mínimo para clonar el repositorio. Si el sistema no tiene `sudo`, ejecutar estos comandos como root:
 
 ```bash
 sudo apt update
 sudo apt upgrade -y
-sudo apt install -y git curl openssl bc
+sudo apt install -y git ca-certificates
 ```
 
 Clonar el repositorio del instalador:
@@ -113,7 +117,7 @@ git clone https://github.com/agustinra24/auto-iotserver
 cd auto-iotserver
 ```
 
-**Nota:** El instalador verifica automáticamente estas dependencias al iniciar.
+**Nota:** El instalador verifica e instala automáticamente sus dependencias internas al iniciar, incluyendo `curl`, `openssl` y `bc` cuando faltan.
 
 ### Asignar Permisos de Ejecución
 
@@ -130,6 +134,8 @@ sudo ./install.sh --dry-run
 ```
 
 Este modo muestra el plan completo sin aplicar cambios.
+No instala paquetes, no escribe en `/etc`, no crea swap, no guarda `.config.env` y no genera secretos.
+Si se inició sesión como root, omitir `sudo` en los comandos del instalador.
 
 ### Ejecución del Instalador
 
@@ -139,40 +145,98 @@ Iniciar la instalación interactiva:
 sudo ./install.sh
 ```
 
-El instalador solicitará los siguientes parámetros de configuración:
+El instalador detecta RAM, swap, CPU, almacenamiento total, almacenamiento libre, arquitectura y versión Debian al iniciar. En hosts modestos de 2 GB nominales selecciona `low-resource` automáticamente. En discos con menos de 20 GB libres selecciona `compact-storage` automáticamente si quedan al menos 5 GB libres reales para completar la instalación.
+
+`low-resource` mantiene el stack completo, pero aplica límites y tuning conservador: 1 worker de FastAPI, Redis reducido, caché WiredTiger explícita, buffer pool InnoDB reducido, límites efectivos de Docker Compose y swapfile cuando la RAM es menor a 3 GB y el swap disponible es insuficiente. Está orientado a cargas IoT livianas con baja concurrencia; no reemplaza el perfil estándar como recomendación general.
+
+`compact-storage` es un modo de laboratorio para hosts con poco espacio libre. Usa swapfile de 1 GB y reduce la rotación de logs de Docker. Durante la instalación el administrador decide por separado si activa alertas de almacenamiento y qué modo de purga automática desea cuando el disco cruza el umbral de riesgo:
+
+- `system`: elimina logs, caches Docker, contenedores detenidos, imágenes colgantes y build cache.
+- `data`: elimina datos históricos según retención. En MongoDB purga `sensor_readings`, `device_logs` y `alerts` por `timestamp`. En MySQL purga historial relacional antiguo y servicios cerrados, pero no usuarios, admins, dispositivos, credenciales, roles ni permisos.
+- `both`: combina `system` y `data`.
+- `none`: no purga automáticamente.
+
+Las alertas pueden quedar activas aunque la purga esté desactivada. Esto permite enterarse de presión de almacenamiento aunque el origen sea MySQL, MongoDB o cualquier otro componente.
+
+Raspberry Pi 4/400/CM4 se detecta automáticamente y el instalador pregunta si se acepta el modo legacy de laboratorio. Para ejecución no interactiva existe el override avanzado:
+
+```bash
+sudo ./install.sh --allow-legacy-pi4-mongodb
+```
+
+Ese modo cambia únicamente la imagen de MongoDB a `mongo:4.4.30-focal` y mantiene el resto del stack. Es una ruta de compatibilidad temporal para laboratorio, no una configuración de producción.
+
+El instalador solicitará estos parámetros de configuración y mostrará los valores detectados del sistema:
 
 - **Dirección IP del servidor**: se detecta automáticamente; confirmar o modificar.
 - **Nombre de usuario del sistema**: reemplaza al usuario por defecto de Debian.
 - **Puerto SSH personalizado**: se recomienda un puerto no estándar (ej: 5259).
 - **Nombre de dominio**: opcional, para configuración futura de SSL/TLS.
+- **Perfil detectado**: se calcula automáticamente desde los recursos reales del sistema.
+- **Compact storage**: se activa automáticamente cuando el almacenamiento disponible lo requiere.
+- **Almacenamiento detectado**: total y libre medidos con `df -Pm`, sin redondeos peligrosos.
+- **Alertas de almacenamiento**: `enabled` o `disabled`.
+- **Modo de purga**: `system`, `data`, `both` o `none`.
+- **Retención de datos**: días mínimos a conservar cuando se activa purga `data` o `both`.
+- **Memoria Redis**: por defecto `256mb` en `standard` y `128mb` en `low-resource`.
 - **Credenciales del administrador principal**: email y contraseña para la cuenta maestra de la plataforma.
 
 Todos los valores entre corchetes son sugerencias del sistema. Presionar Enter acepta el valor por defecto.
 
+### Validación de Docker Hub y DNS
+
+Después de instalar Docker, el instalador valida explícitamente que Docker pueda llegar a Docker Hub antes de intentar desplegar el stack. Esta validación existe porque en VMware NAT se verificó un fallo real donde el host podía resolver algunos dominios, pero Docker Engine no podía resolver `registry-1.docker.io` usando el DNS NAT `192.168.147.2`.
+
+La validación ejecuta:
+
+```bash
+getent hosts registry-1.docker.io
+curl -sSIL https://registry-1.docker.io/v2/
+docker pull hello-world
+docker image rm hello-world:latest
+```
+
+Una respuesta HTTP `401` en `https://registry-1.docker.io/v2/` es válida: significa que el registry respondió y pidió autenticación, no que la red esté rota. Si `docker pull hello-world` falla por DNS y el instalador reconoce el gestor de red, aplica una reparación conservadora:
+
+- `dhcpcd`: escribe `/etc/resolv.conf.head` con `1.1.1.1`, `8.8.8.8` y opciones de timeout cortas, después renueva DNS y reinicia Docker.
+- `systemd-resolved`: crea un drop-in en `/etc/systemd/resolved.conf.d/`, reinicia `systemd-resolved` y reinicia Docker.
+- `NetworkManager`: configura DNS público en la conexión activa, reaplica la conexión y reinicia Docker.
+- `resolv.conf` plano: respalda `/etc/resolv.conf` y escribe DNS público.
+
+Además, `/etc/docker/daemon.json` conserva rotación de logs y añade `dns` como defensa secundaria. Esto ayuda a contenedores y al daemon, pero no sustituye la reparación del resolver del host cuando el problema está en el DNS entregado por DHCP/NAT.
+
+Si la red bloquea Docker Hub, TLS, DNS externo o exige proxy corporativo autenticado, el instalador falla temprano con diagnóstico y no intenta inventar un bypass inseguro.
+
 ### Proceso de Instalación
 
-El instalador ejecuta 14 fases secuenciales:
+El instalador ejecuta 14 fases operativas. En pantalla se numeran internamente de 0 a 13:
 
-1. Preparación y validación de recursos del sistema
-2. Creación de usuario administrativo y transición automática
-3. Instalación de dependencias base (Python, herramientas de compilación)
-4. Configuración de firewall con nftables
-5. Despliegue de Fail2Ban con jails para SSH y Nginx
-6. Hardening de SSH (cambio de puerto, deshabilitación de root)
-7. Instalación de Docker CE y Docker Compose
-8. Creación de estructura de directorios del proyecto
-9. Despliegue de la aplicación FastAPI
-10. Inicialización del esquema de base de datos MySQL
-11. Configuración de Nginx como proxy inverso
-12. Orquestación de contenedores con Docker Compose
-13. Pruebas de integración y validación de endpoints
-14. Limpieza de archivos temporales y verificación final
+0. Preparación y validación de recursos del sistema
+1. Creación de usuario administrativo y transición automática
+2. Instalación de dependencias base (Python, herramientas de compilación)
+3. Configuración de firewall con nftables
+4. Despliegue de Fail2Ban con jails para SSH y Nginx
+5. Hardening de SSH (cambio de puerto, deshabilitación de root)
+6. Instalación de Docker CE y Docker Compose, con validación Docker Hub/DNS antes de deployment
+7. Creación de estructura de directorios del proyecto
+8. Despliegue de la aplicación FastAPI
+9. Inicialización del esquema de base de datos MySQL
+10. Configuración de Nginx como proxy inverso
+11. Orquestación de contenedores con Docker Compose, usando salida `--progress plain` y diagnóstico detallado en caso de fallo
+12. Pruebas de integración y validación de endpoints
+13. Limpieza de archivos temporales y verificación final
 
 Cada fase incluye checkpoints. Si la instalación se interrumpe, es posible reanudarla desde el último punto exitoso con `--resume`.
 
 ### Tiempo de Instalación
 
-Entre 10 y 15 minutos, dependiendo de la velocidad del servidor y la latencia de red.
+Entre 10 y 20 minutos en perfil estándar, dependiendo de la velocidad del servidor y la latencia de red. En 2 GB de RAM o medios compactos puede tardar más.
+
+### Evidencia de Validación V1.3
+
+V1.3 fue validado en una VM Debian 13.4 ARM64 con 2 GB de RAM nominales y perfil `compact-storage`. La instalación completó 14 de 14 fases; después se verificaron 5 contenedores `healthy`, `/health` local y LAN, bases de datos no expuestas al host, `OOMKilled=false`, `RestartCount=0`, Docker, Fail2Ban y nftables activos, y recuperación correcta tras reboot.
+
+Esta validación cubre laboratorio, demo y cargas IoT livianas. No sustituye pruebas de carga ni endurecimiento adicional para producción pública.
 
 ---
 
@@ -446,7 +510,7 @@ NAME            STATUS          PORTS
 iot-mysql       Up (healthy)    
 iot-mongodb     Up (healthy)    
 iot-redis       Up (healthy)    
-iot-fastapi     Up (healthy)    0.0.0.0:5000->5000/tcp
+iot-fastapi     Up (healthy)    5000/tcp
 iot-nginx       Up (healthy)    0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
 ```
 
@@ -556,7 +620,7 @@ Conectar usando el nuevo puerto:
 ssh <usuario>@<ip> -p <puerto>
 ```
 
-Si no se puede acceder por SSH, usar la consola del proveedor del VPS.
+Si no se puede acceder por SSH, usar la consola local, del hipervisor, o del proveedor.
 
 ### Contenedor No Inicia
 
@@ -572,6 +636,30 @@ Reiniciar un contenedor específico:
 ```bash
 sudo docker compose restart <nombre_contenedor>
 ```
+
+### Fase 11 Falla al Descargar Imágenes Docker
+
+Si aparece un error similar a `lookup registry-1.docker.io ... no such host`, el problema está en la resolución DNS hacia Docker Hub, no en MySQL, MongoDB ni FastAPI. El instalador v1.3 valida este punto en Fase 6 y, si reconoce el gestor de red, intenta corregirlo antes del deployment.
+
+Diagnóstico manual:
+
+```bash
+getent hosts registry-1.docker.io
+curl -sSIL https://registry-1.docker.io/v2/
+docker pull hello-world
+cat /etc/resolv.conf
+systemctl is-active systemd-resolved NetworkManager networking
+```
+
+En VMware NAT con `dhcpcd`, el caso observado fue `/etc/resolv.conf` generado con `nameserver 192.168.147.2`. La reparación persistente aplicada por el installer usa `/etc/resolv.conf.head`:
+
+```bash
+cat /etc/resolv.conf.head
+systemctl restart docker
+docker pull hello-world
+```
+
+Si el fallo ocurre en una red corporativa, escolar o detrás de proxy autenticado, se requiere permitir Docker Hub o configurar proxy de Docker. El instalador no omite TLS ni usa mirrors no confiables.
 
 ### Fail2Ban No Inicia
 
@@ -613,12 +701,12 @@ Si la verificación del reto criptográfico falla:
 | Componente | Versión | Propósito |
 |------------|---------|-----------|
 | Debian | 13 (Trixie) | Sistema operativo base |
-| Docker | CE + Compose v2 | Contenedorización y orquestación |
+| Docker | CE + Compose v2 preferido; fallback Debian `docker.io` + `docker-compose` si CE no aparece en APT | Contenedorización y orquestación |
 | FastAPI | 0.110.0 | Framework de API asíncrona |
 | Uvicorn | 0.27.1 | Servidor ASGI |
 | SQLAlchemy | 2.0.25 | ORM para MySQL |
 | MySQL | 8.0 | RDBMS para datos estructurados |
-| MongoDB | 7.0 | NoSQL para series temporales |
+| MongoDB | 7.0 por defecto, 4.4.30-focal solo en modo legacy Pi 4 confirmado | NoSQL para series temporales |
 | PyMongo | 4.6.0 | Cliente de MongoDB |
 | Redis | 7 | Store de sesiones en memoria |
 | Nginx | 1.25-alpine | Proxy inverso y balanceador |
@@ -716,7 +804,7 @@ Este proyecto se distribuye bajo los términos especificados en el archivo LICEN
 Para problemas de instalación, revisar primero el log generado:
 
 ```bash
-cat ~/auto-iotserver/logs/install-<fecha>.log
+cat ~/iot-platform-installer/logs/install-<fecha>.log
 ```
 
 Este archivo contiene el registro completo de todas las operaciones y mensajes de error detallados.
@@ -739,5 +827,5 @@ sudo docker logs iot-mongodb --tail=100
 
 ---
 
-**V1.2** | Abril 2026
+**V1.3** | Abril 2026
 Plataforma IoT con Seguridad Integrada

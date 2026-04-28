@@ -1,4 +1,4 @@
-## Firmware MicroPython para ESP32 (IoT Device) — V1.2
+## Firmware MicroPython para ESP32 (IoT Device) — V1.3
 
 Firmware modular para ESP32 que se comunica con la API FastAPI del auto-iotserver. Lee sensores de temperatura, humedad y ruido, controla actuadores (LED semaforo, IR) con logica local, y envia telemetria al servidor usando autenticacion criptografica de puzzle (HMAC-SHA256 + AES-256-CBC) con tokens JWT. Incluye toggle fisico (GPIO 0 / BOOT) para pausar/reanudar el envio de datos sin detener la lectura de sensores.
 

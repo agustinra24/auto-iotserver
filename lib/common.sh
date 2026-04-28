@@ -52,6 +52,8 @@ COMPACT_HOST_LOG_MAX_SIZE="5M"
 COMPACT_HOST_LOG_ROTATE="2"
 DEFAULT_DATA_RETENTION_DAYS=30
 COMPACT_DATA_RETENTION_DAYS=7
+APT_LOCK_WAIT_TIMEOUT_SECONDS=600
+APT_LOCK_WAIT_INTERVAL_SECONDS=5
 
 # Funciones de logging
 log_info() {
@@ -120,6 +122,91 @@ ensure_docker_user_chain() {
     iptables -C DOCKER-USER -j RETURN 2>/dev/null || iptables -A DOCKER-USER -j RETURN
 }
 
+command_uses_apt_or_dpkg() {
+    local cmd="$1"
+
+    [[ "$cmd" == *"apt-get"* || "$cmd" == apt\ * || "$cmd" == *" apt "* || "$cmd" == dpkg\ * || "$cmd" == *" dpkg "* ]]
+}
+
+apt_dpkg_lock_details() {
+    local locks=(
+        "/var/lib/dpkg/lock-frontend"
+        "/var/lib/dpkg/lock"
+        "/var/cache/apt/archives/lock"
+        "/var/lib/apt/lists/lock"
+    )
+    local lock=""
+    local pids=""
+    local pid=""
+    local cmdline=""
+    local found=false
+
+    if command_exists fuser; then
+        for lock in "${locks[@]}"; do
+            [[ -e "$lock" ]] || continue
+
+            pids=$(fuser "$lock" 2>/dev/null | tr -s ' ' '\n' | sed '/^$/d' | sort -u || true)
+            [[ -n "$pids" ]] || continue
+
+            while IFS= read -r pid; do
+                [[ -n "$pid" ]] || continue
+                found=true
+                if [[ -r "/proc/$pid/cmdline" ]]; then
+                    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
+                else
+                    cmdline=$(ps -p "$pid" -o command= 2>/dev/null || true)
+                fi
+                printf '%s pid=%s %s\n' "$lock" "$pid" "${cmdline:-comando no disponible}"
+            done <<< "$pids"
+        done
+    else
+        pids=$(pgrep -af 'apt-get|apt |dpkg|unattended-upgr' 2>/dev/null || true)
+        [[ -n "$pids" ]] || return 1
+        found=true
+        while IFS= read -r cmdline; do
+            [[ -n "$cmdline" ]] || continue
+            printf 'proceso apt/dpkg activo: %s\n' "$cmdline"
+        done <<< "$pids"
+    fi
+
+    [[ "$found" == true ]]
+}
+
+wait_for_apt_dpkg_locks() {
+    local timeout="${1:-$APT_LOCK_WAIT_TIMEOUT_SECONDS}"
+    local interval="${2:-$APT_LOCK_WAIT_INTERVAL_SECONDS}"
+    local elapsed=0
+    local details=""
+
+    while true; do
+        details=$(apt_dpkg_lock_details || true)
+        if [[ -z "$details" ]]; then
+            return 0
+        fi
+
+        if [[ $elapsed -eq 0 ]]; then
+            log_warning "APT/DPKG está ocupado; esperando hasta ${timeout}s antes de continuar"
+            while IFS= read -r line; do
+                [[ -n "$line" ]] && log_info "$line"
+            done <<< "$details"
+        elif (( elapsed % 30 == 0 )); then
+            log_info "APT/DPKG sigue ocupado (${elapsed}s/${timeout}s)"
+        fi
+
+        if (( elapsed >= timeout )); then
+            log_error "APT/DPKG sigue bloqueado después de ${timeout}s"
+            while IFS= read -r line; do
+                [[ -n "$line" ]] && log_error "$line"
+            done <<< "$details"
+            log_error "Espera a que termine el proceso dueño del lock y reanuda con: sudo ./install.sh --resume"
+            return 1
+        fi
+
+        sleep "$interval"
+        elapsed=$((elapsed + interval))
+    done
+}
+
 # Ejecutar comando con logging
 exec_cmd() {
     local cmd="$1"
@@ -130,6 +217,12 @@ exec_cmd() {
     if [[ "$DRY_RUN" == true ]]; then
         echo -e "${CYAN}[DRY-RUN]${RESET} Ejecutaría: $cmd"
         return 0
+    fi
+
+    if command_uses_apt_or_dpkg "$cmd"; then
+        if ! wait_for_apt_dpkg_locks; then
+            return 1
+        fi
     fi
     
     if eval "$cmd" >> "$LOG_FILE" 2>&1; then

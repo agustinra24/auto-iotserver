@@ -85,7 +85,9 @@ preflight_checks() {
             log_info "[DRY-RUN] No se instalarán paquetes. En instalación real se ejecutaría apt-get update e instalación de: ca-certificates ${missing_cmds[*]}"
         else
             log_info "Instalando dependencias minimas de preflight..."
+            wait_for_apt_dpkg_locks || exit 1
             DEBIAN_FRONTEND=noninteractive apt-get update >> "$LOG_FILE" 2>&1
+            wait_for_apt_dpkg_locks || exit 1
             DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates "${missing_cmds[@]}" >> "$LOG_FILE" 2>&1
         fi
     fi

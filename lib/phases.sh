@@ -849,10 +849,7 @@ phase_2_dependencies() {
     if [[ "$DRY_RUN" != true ]]; then
         systemctl stop unattended-upgrades 2>/dev/null || true
         systemctl disable unattended-upgrades 2>/dev/null || true
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-            log_info "Esperando a que apt termine..."
-            sleep 2
-        done
+        wait_for_apt_dpkg_locks
     fi
     complete_task "Actualizaciones automáticas deshabilitadas"
     
@@ -1887,7 +1884,9 @@ SERVICEEOF
     show_task "Limpiando archivos temporales" "running"
     if [[ "$DRY_RUN" != true ]]; then
         rm -rf /tmp/iot-platform-argon2-venv 2>/dev/null || true
+        wait_for_apt_dpkg_locks || true
         apt-get clean 2>/dev/null || true
+        wait_for_apt_dpkg_locks || true
         apt-get autoremove -y 2>/dev/null || true
     fi
     complete_task "Archivos temporales eliminados"

@@ -133,6 +133,96 @@ validate_subnet() {
     return 0
 }
 
+# Validar límite de memoria Redis
+validate_redis_memory() {
+    local value=$1
+
+    if [[ ! $value =~ ^[1-9][0-9]*(kb|mb|gb)$ ]]; then
+        log_error "Límite Redis inválido: $value"
+        log_error "Usa formato Redis sin espacios, por ejemplo: 128mb, 256mb, 1gb"
+        return 1
+    fi
+
+    return 0
+}
+
+validate_storage_purge_mode() {
+    local mode=$1
+
+    case "$mode" in
+        system|data|both|none)
+            return 0
+            ;;
+        *)
+            log_error "Modo de purga inválido: $mode"
+            log_error "Valores permitidos: system, data, both, none"
+            return 1
+            ;;
+    esac
+}
+
+validate_retention_days() {
+    local days=$1
+
+    if [[ ! $days =~ ^[1-9][0-9]*$ ]]; then
+        log_error "Retención inválida: $days"
+        log_error "Usa días enteros positivos, por ejemplo: 7, 30, 90"
+        return 1
+    fi
+
+    if [[ $days -lt 1 || $days -gt 3650 ]]; then
+        log_error "La retención debe estar entre 1 y 3650 días"
+        return 1
+    fi
+
+    return 0
+}
+
+# Validar perfil de recursos del instalador
+validate_resource_profile() {
+    local profile=$1
+
+    case "$profile" in
+        standard|low-resource)
+            return 0
+            ;;
+        *)
+            log_error "Perfil de recursos inválido: $profile"
+            log_error "Valores permitidos: standard, low-resource"
+            return 1
+            ;;
+    esac
+}
+
+# Validar zona horaria IANA con fallback conservador
+validate_timezone() {
+    local timezone=$1
+
+    if [[ -z "$timezone" ]]; then
+        log_error "Zona horaria vacía"
+        return 1
+    fi
+
+    if [[ ! $timezone =~ ^[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)*$ ]]; then
+        log_error "Zona horaria inválida: $timezone"
+        log_error "Usa un identificador IANA, por ejemplo: America/Mexico_City o UTC"
+        return 1
+    fi
+
+    if command -v timedatectl &> /dev/null; then
+        if timedatectl list-timezones 2>/dev/null | grep -Fxq -- "$timezone"; then
+            return 0
+        fi
+    fi
+
+    if [[ "$timezone" == "UTC" ]] || [[ -f "/usr/share/zoneinfo/$timezone" ]]; then
+        return 0
+    fi
+
+    log_error "Zona horaria no encontrada en el sistema: $timezone"
+    return 1
+}
+
 # Validar dirección de correo electrónico
 validate_email() {
     local email=$1

@@ -8,20 +8,82 @@
 ################################################################################
 validate_system_requirements() {
     log_info "Validando requisitos del sistema..."
-    
-    local ram_mb=$(free -m | awk '/^Mem:/{print $2}')
-    if [[ $ram_mb -lt 1024 ]]; then
-        log_error "RAM insuficiente: ${ram_mb}MB (mínimo: 1024MB)"
+
+    local profile ram_mb min_ram_mb total_mb available_mb min_total_mb min_available_mb
+    profile=$(resource_profile)
+    validate_resource_profile "$profile" || return 1
+
+    ram_mb=$(total_ram_mb)
+    if is_compact_storage; then
+        min_ram_mb=$LOW_RESOURCE_MIN_RAM_MB
+        min_total_mb=$COMPACT_STORAGE_MIN_TOTAL_MB
+        min_available_mb=$COMPACT_STORAGE_MIN_AVAILABLE_MB
+    elif [[ "$profile" == "$LOW_RESOURCE_PROFILE" ]]; then
+        min_ram_mb=$LOW_RESOURCE_MIN_RAM_MB
+        min_total_mb=0
+        min_available_mb=$LOW_RESOURCE_MIN_DISK_MB
+    else
+        min_ram_mb=$STANDARD_MIN_RAM_MB
+        min_total_mb=0
+        min_available_mb=$STANDARD_MIN_DISK_MB
+    fi
+
+    if [[ $ram_mb -lt $min_ram_mb ]]; then
+        if [[ "$profile" == "$LOW_RESOURCE_PROFILE" ]]; then
+            log_error "RAM insuficiente para low-resource: ${ram_mb}MB (mínimo nominal aceptado: 2GB, umbral real: ${min_ram_mb}MB)"
+        else
+            log_error "RAM insuficiente para perfil standard: ${ram_mb}MB (mínimo nominal: 4GB, umbral real: ${min_ram_mb}MB)"
+            log_error "El instalador selecciona low-resource automaticamente en hosts de 2GB nominales; si ves este error, revisa la configuración guardada o la RAM asignada a la VM."
+        fi
         return 1
     fi
-    log_success "RAM: ${ram_mb}MB"
-    
-    local disk_gb=$(df -BG / | awk 'NR==2 {gsub("G",""); print $4}')
-    if [[ $disk_gb -lt 10 ]]; then
-        log_error "Espacio en disco insuficiente: ${disk_gb}GB (mínimo: 10GB)"
+
+    if [[ "$profile" == "$LOW_RESOURCE_PROFILE" ]]; then
+        log_warning "Perfil low-resource activo: objetivo 2GB RAM nominales, carga IoT liviana y concurrencia limitada."
+    fi
+    if is_compact_storage; then
+        log_warning "Compact storage activo: modo laboratorio para hosts con poco espacio libre."
+        log_warning "Riesgo esperado: agotamiento rápido de espacio si crecen logs, imágenes Docker o datos IoT."
+        if [[ "$(storage_purge_mode)" == "none" ]]; then
+            log_warning "Purga automática desactivada; solo alertas si fueron habilitadas."
+        else
+            log_warning "Modo de purga activo: $(storage_purge_mode), retención datos: ${DATA_RETENTION_DAYS:-$(default_data_retention_days_for_profile)} días."
+        fi
+    fi
+    log_success "RAM: ${ram_mb}MB (perfil: $profile)"
+
+    total_mb=$(storage_total_mb)
+    available_mb=$(storage_available_mb)
+    STORAGE_TOTAL_MB="$total_mb"
+    STORAGE_AVAILABLE_MB="$available_mb"
+
+    if [[ $min_total_mb -gt 0 && $total_mb -lt $min_total_mb ]]; then
+        log_error "Almacenamiento total insuficiente: $(format_storage_mb "$total_mb") (mínimo compact-storage: $(format_storage_mb "$min_total_mb"))"
+        log_error "Un medio de 8GB nominal suele verse como ~7.2 a 7.5GB reales; por debajo de eso no hay margen para Docker y bases de datos."
         return 1
     fi
-    log_success "Espacio en disco: ${disk_gb}GB"
+
+    if [[ $available_mb -lt $min_available_mb ]]; then
+        log_error "Espacio libre insuficiente: $(format_storage_mb "$available_mb") disponibles (mínimo: $(format_storage_mb "$min_available_mb"))"
+        if is_compact_storage; then
+            log_error "Compact-storage necesita al menos $(format_storage_mb "$COMPACT_STORAGE_MIN_AVAILABLE_MB") libres en una instalación limpia."
+        else
+            log_error "El instalador activa compact-storage automaticamente cuando detecta menos de $(format_storage_mb "$LOW_RESOURCE_MIN_DISK_MB") libres; si vienes de una reanudación, revisa .config.env."
+        fi
+        return 1
+    fi
+
+    if is_compact_storage; then
+        if [[ $total_mb -lt $COMPACT_STORAGE_RECOMMENDED_TOTAL_MB ]]; then
+            log_warning "Disco total muy ajustado: $(format_storage_mb "$total_mb") (recomendado: $(format_storage_mb "$COMPACT_STORAGE_RECOMMENDED_TOTAL_MB")+ para más margen)."
+        fi
+        if [[ $available_mb -lt $COMPACT_STORAGE_RECOMMENDED_AVAILABLE_MB ]]; then
+            log_warning "Espacio libre muy ajustado: $(format_storage_mb "$available_mb") (recomendado: $(format_storage_mb "$COMPACT_STORAGE_RECOMMENDED_AVAILABLE_MB")+ en compact-storage)."
+        fi
+    elif [[ "$profile" == "$LOW_RESOURCE_PROFILE" && $available_mb -lt $LOW_RESOURCE_RECOMMENDED_DISK_MB ]]; then
+        log_warning "Disco justo para low-resource: $(format_storage_mb "$available_mb") disponibles (recomendado: $(format_storage_mb "$LOW_RESOURCE_RECOMMENDED_DISK_MB")+)"
+    fi
+    log_success "Almacenamiento: total $(format_storage_mb "$total_mb"), libre $(format_storage_mb "$available_mb")"
     
     local cpu_cores=$(nproc)
     if [[ $cpu_cores -lt 1 ]]; then
@@ -30,13 +92,502 @@ validate_system_requirements() {
     fi
     log_success "Núcleos CPU: $cpu_cores"
     
-    if ! ping -c 1 google.com &> /dev/null; then
+    if ! curl -fsSL --max-time 10 https://deb.debian.org/debian/ > /dev/null 2>&1; then
         log_error "Sin conectividad a internet"
         return 1
     fi
     log_success "Conectividad a internet"
     
     return 0
+}
+
+ensure_low_resource_swap() {
+    local ram_mb swap_mb swapfile="/swapfile" target_swap_mb
+
+    if ! is_low_resource_profile; then
+        return 0
+    fi
+
+    ram_mb=$(total_ram_mb)
+    swap_mb=$(total_swap_mb)
+    if is_compact_storage; then
+        target_swap_mb=$COMPACT_STORAGE_SWAP_MB
+    else
+        target_swap_mb=$LOW_RESOURCE_MIN_SWAP_MB
+    fi
+
+    if [[ $ram_mb -ge $LOW_RESOURCE_SWAP_TRIGGER_RAM_MB ]]; then
+        log_info "RAM >= ${LOW_RESOURCE_SWAP_TRIGGER_RAM_MB}MB; no se requiere swap adicional low-resource"
+        return 0
+    fi
+
+    if [[ $swap_mb -ge $target_swap_mb ]]; then
+        log_success "Swap existente suficiente: ${swap_mb}MB"
+        if [[ "$DRY_RUN" != true ]]; then
+            printf 'vm.swappiness=10\n' > /etc/sysctl.d/99-iot-low-resource.conf
+            sysctl -w vm.swappiness=10 >> "$LOG_FILE" 2>&1 || true
+        fi
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${CYAN}[DRY-RUN]${RESET} Crearía swapfile de ${target_swap_mb}MB y configuraría vm.swappiness=10"
+        return 0
+    fi
+
+    if [[ -e "$swapfile" ]]; then
+        log_error "Swap total insuficiente (${swap_mb}MB) y $swapfile ya existe."
+        log_error "Redimensiona o elimina ese swapfile manualmente antes de continuar."
+        return 1
+    fi
+
+    log_info "Creando swapfile de ${target_swap_mb}MB para perfil low-resource..."
+    fallocate -l "${target_swap_mb}M" "$swapfile" 2>> "$LOG_FILE" || dd if=/dev/zero of="$swapfile" bs=1M count="$target_swap_mb" >> "$LOG_FILE" 2>&1
+    chmod 600 "$swapfile"
+    mkswap "$swapfile" >> "$LOG_FILE" 2>&1
+
+    if ! swapon --show=NAME --noheadings | grep -Fxq "$swapfile"; then
+        swapon "$swapfile" >> "$LOG_FILE" 2>&1
+    fi
+
+    if ! grep -Eq '^[[:space:]]*/swapfile[[:space:]]+none[[:space:]]+swap[[:space:]]' /etc/fstab; then
+        printf '/swapfile none swap sw 0 0\n' >> /etc/fstab
+    fi
+
+    printf 'vm.swappiness=10\n' > /etc/sysctl.d/99-iot-low-resource.conf
+    sysctl -w vm.swappiness=10 >> "$LOG_FILE" 2>&1 || true
+
+    log_success "Swap low-resource configurado"
+}
+
+configure_docker_daemon_logging() {
+    local daemon_file="${DOCKER_DAEMON_JSON_FILE:-/etc/docker/daemon.json}"
+    local tmp_file log_max_size log_max_file dns_json
+    log_max_size=$(docker_log_max_size)
+    log_max_file=$(docker_log_max_file)
+    dns_json=$(docker_dns_json)
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${CYAN}[DRY-RUN]${RESET} Configuraría Docker daemon.json con DNS=${dns_json}, json-file max-size=${log_max_size} max-file=${log_max_file}"
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$daemon_file")"
+    tmp_file=$(mktemp)
+
+    if [[ -f "$daemon_file" ]]; then
+        if ! jq empty "$daemon_file" >> "$LOG_FILE" 2>&1; then
+            log_error "Docker daemon.json existente no es JSON válido: $daemon_file"
+            rm -f "$tmp_file"
+            return 1
+        fi
+
+        cp "$daemon_file" "${daemon_file}.bak.$(date +%Y%m%d%H%M%S)"
+        jq --argjson dns "$dns_json" --arg max_size "$log_max_size" --arg max_file "$log_max_file" \
+            '. + {"dns":$dns,"log-driver":"json-file"} | .["log-opts"] = ((.["log-opts"] // {}) + {"max-size":$max_size,"max-file":$max_file})' \
+            "$daemon_file" > "$tmp_file"
+    else
+        printf '{\n  "dns": %s,\n  "log-driver": "json-file",\n  "log-opts": {\n    "max-size": "%s",\n    "max-file": "%s"\n  }\n}\n' "$dns_json" "$log_max_size" "$log_max_file" > "$tmp_file"
+    fi
+
+    if command_exists dockerd && dockerd --help 2>/dev/null | grep -q -- '--validate'; then
+        if ! dockerd --validate --config-file="$tmp_file" >> "$LOG_FILE" 2>&1; then
+            log_error "Docker daemon.json generado no pasó validación de dockerd"
+            rm -f "$tmp_file"
+            return 1
+        fi
+    fi
+
+    install -m 0644 "$tmp_file" "$daemon_file"
+    rm -f "$tmp_file"
+}
+
+compose_supports_progress_flag() {
+    docker compose --help 2>/dev/null | grep -q -- '--progress'
+}
+
+run_compose_up() {
+    local output_file="$1"
+    local compose_cmd=("docker" "compose")
+
+    if compose_supports_progress_flag; then
+        compose_cmd+=("--progress" "plain")
+    fi
+    compose_cmd+=("up" "-d")
+
+    if is_low_resource_profile || is_compact_storage; then
+        COMPOSE_PARALLEL_LIMIT=1 "${compose_cmd[@]}" > "$output_file" 2>&1
+    else
+        "${compose_cmd[@]}" > "$output_file" 2>&1
+    fi
+}
+
+collect_deployment_failure_diagnostics() {
+    local install_dir="$1"
+    local compose_output="${2:-}"
+    local diag_file="$install_dir/deployment-diagnostics-$(date +%Y%m%d-%H%M%S).log"
+
+    {
+        echo "=== compose output ==="
+        if [[ -n "$compose_output" && -f "$compose_output" ]]; then
+            cat "$compose_output"
+        fi
+        echo
+        echo "=== docker compose ps -a ==="
+        docker compose ps -a || true
+        echo
+        echo "=== docker images ==="
+        docker images || true
+        echo
+        echo "=== docker system df ==="
+        docker system df || true
+        echo
+        echo "=== /etc/resolv.conf ==="
+        cat "$(current_resolv_conf_file)" 2>/dev/null || true
+        echo
+        echo "=== registry DNS ==="
+        getent hosts "$DOCKER_REGISTRY_HOST" || true
+        echo
+        echo "=== registry HTTP ==="
+        curl -sSIL --max-time 15 "$DOCKER_REGISTRY_URL" || true
+        echo
+        echo "=== docker service logs ==="
+        journalctl -u docker --no-pager -n 120 || true
+    } > "$diag_file" 2>&1
+
+    cat "$diag_file" >> "$LOG_FILE" 2>/dev/null || true
+    log_error "Diagnóstico detallado guardado en: $diag_file"
+
+    if [[ -n "$compose_output" && -f "$compose_output" ]]; then
+        if grep -Eiq 'lookup|no such host|failed to resolve|registry-1\.docker\.io|auth\.docker\.io|temporary failure in name resolution' "$compose_output"; then
+            log_error "Causa probable: fallo DNS contra Docker Hub o registry de imágenes."
+        elif grep -Eiq 'no space left|not enough space|ENOSPC' "$compose_output"; then
+            log_error "Causa probable: almacenamiento insuficiente durante pull/build."
+        elif grep -Eiq 'killed|oom|out of memory' "$compose_output"; then
+            log_error "Causa probable: presión de memoria u OOM durante pull/build."
+        else
+            log_error "No se detectó una causa única en la salida de Compose; revisa el diagnóstico completo."
+        fi
+
+        log_error "Últimas líneas de Compose:"
+        tail -n 35 "$compose_output" >&2 || true
+    fi
+}
+
+install_storage_maintenance() {
+    local install_dir="$INSTALL_DIR"
+    local log_max_size rotate_count timer_interval warn_pct critical_pct builder_prune_cmd
+    local autopurge_enabled alerts_enabled purge_mode data_retention_days
+
+    log_max_size=$(host_log_max_size)
+    rotate_count=$(host_log_rotate_count)
+    purge_mode=$(storage_purge_mode)
+    data_retention_days="${DATA_RETENTION_DAYS:-$(default_data_retention_days_for_profile)}"
+    if safe_autopurge_enabled; then
+        autopurge_enabled=true
+    else
+        autopurge_enabled=false
+    fi
+    if storage_alerts_enabled; then
+        alerts_enabled=true
+    else
+        alerts_enabled=false
+    fi
+
+    if is_compact_storage; then
+        timer_interval="6h"
+        warn_pct=80
+        critical_pct=90
+        builder_prune_cmd="docker builder prune -af"
+    else
+        timer_interval="24h"
+        warn_pct=85
+        critical_pct=92
+        builder_prune_cmd="docker builder prune -af --filter until=24h"
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${CYAN}[DRY-RUN]${RESET} Configuraría mantenimiento de almacenamiento cada ${timer_interval} (alertas: $(alerts_mode_label), purga: $(autopurge_mode_label), retención: ${data_retention_days} días)"
+        return 0
+    fi
+
+    if [[ "$alerts_enabled" != true && "$purge_mode" == "none" ]]; then
+        systemctl disable --now iot-storage-maintenance.timer >/dev/null 2>&1 || true
+        rm -f /etc/systemd/system/iot-storage-maintenance.service
+        rm -f /etc/systemd/system/iot-storage-maintenance.timer
+        rm -f /etc/profile.d/iot-storage-warning.sh
+        rm -f /usr/local/sbin/iot-storage-maintenance
+        systemctl daemon-reload
+        log_warning "Mantenimiento de almacenamiento desactivado por decisión explícita del administrador"
+        return 0
+    fi
+
+    cat > /usr/local/sbin/iot-storage-maintenance << MAINTENANCEEOF
+#!/bin/bash
+set -u
+
+INSTALL_DIR="$install_dir"
+STATUS_DIR="/var/lib/iot-platform-maintenance"
+WARNING_FILE="\$STATUS_DIR/storage-warning"
+LOG_FILE="/var/log/iot-platform-maintenance.log"
+WARN_PCT=$warn_pct
+CRITICAL_PCT=$critical_pct
+LOG_MAX_SIZE="$log_max_size"
+SAFE_AUTOPURGE="$autopurge_enabled"
+STORAGE_ALERTS="$alerts_enabled"
+STORAGE_PURGE_MODE="$purge_mode"
+DATA_RETENTION_DAYS=$data_retention_days
+
+mkdir -p "\$STATUS_DIR"
+touch "\$LOG_FILE"
+
+log_msg() {
+    local msg="\$1"
+    printf '%s %s\n' "\$(date -Iseconds)" "\$msg" >> "\$LOG_FILE"
+    logger -t iot-storage-maintenance -- "\$msg" 2>/dev/null || true
+}
+
+usage_pct() {
+    local path="\$1"
+    df -P "\$path" 2>/dev/null | awk 'NR==2 {gsub("%","",\$5); print \$5}'
+}
+
+load_app_env() {
+    if [[ ! -r "\$INSTALL_DIR/.env" ]]; then
+        log_msg "No se encontró .env de la aplicación; se omite purga de datos"
+        return 1
+    fi
+
+    set -a
+    # shellcheck disable=SC1090
+    . "\$INSTALL_DIR/.env"
+    set +a
+}
+
+purge_system_storage() {
+    log_msg "Ejecutando purga system: journal, build cache, imágenes colgantes, contenedores detenidos y logs"
+    journalctl --vacuum-size=50M >/dev/null 2>&1 || true
+    $builder_prune_cmd >/dev/null 2>&1 || true
+    docker image prune -f >/dev/null 2>&1 || true
+    docker container prune -f >/dev/null 2>&1 || true
+    find "\$INSTALL_DIR/logs" -type f -name "*.log" -size +"$log_max_size" -exec truncate -s 0 {} \; 2>/dev/null || true
+}
+
+purge_mongodb_data() {
+    load_app_env || return 0
+
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -Fxq "iot-mongodb"; then
+        log_msg "MongoDB no está ejecutándose; se omite purga de datos MongoDB"
+        return 0
+    fi
+
+    local mongo_js
+    mongo_js=\$(cat <<'MONGOJSEOF'
+const retentionDays = Number(__RETENTION_DAYS__);
+const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+["sensor_readings", "device_logs", "alerts"].forEach(function(collectionName) {
+  const result = db.getCollection(collectionName).deleteMany({ timestamp: { \$lt: cutoff } });
+  print(collectionName + ": deleted=" + result.deletedCount);
+});
+MONGOJSEOF
+)
+    mongo_js="\${mongo_js/__RETENTION_DAYS__/\$DATA_RETENTION_DAYS}"
+
+    docker exec \
+        -e MONGO_USER="\${MONGO_USER:-admin}" \
+        -e MONGO_PASSWORD="\${MONGO_PASSWORD:-}" \
+        -e MONGO_DATABASE="\${MONGO_DATABASE:-iot_sensors}" \
+        -e MONGO_AUTH_SOURCE="\${MONGO_AUTH_SOURCE:-admin}" \
+        -e MONGO_PURGE_JS="\$mongo_js" \
+        iot-mongodb bash -lc '
+            set -u
+            shell="mongo"
+            if command -v mongosh >/dev/null 2>&1; then
+                shell="mongosh"
+            fi
+            "\$shell" --quiet \
+                -u "\$MONGO_USER" \
+                -p "\$MONGO_PASSWORD" \
+                --authenticationDatabase "\$MONGO_AUTH_SOURCE" \
+                "\$MONGO_DATABASE" \
+                --eval "\$MONGO_PURGE_JS"
+        ' >/dev/null 2>&1 || log_msg "Purga MongoDB falló; revisar contenedor iot-mongodb"
+}
+
+purge_mysql_data() {
+    load_app_env || return 0
+
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -Fxq "iot-mysql"; then
+        log_msg "MySQL no está ejecutándose; se omite purga de datos MySQL"
+        return 0
+    fi
+
+    local mysql_sql
+    mysql_sql=\$(cat <<'MYSQLEOF'
+DELETE FROM usuario_servicio
+WHERE fecha_asignacion < NOW() - INTERVAL __RETENTION_DAYS__ DAY;
+
+DELETE FROM servicio_app
+WHERE fecha_asignacion < NOW() - INTERVAL __RETENTION_DAYS__ DAY;
+
+DELETE FROM servicio_dispositivo
+WHERE fecha_asignacion < NOW() - INTERVAL __RETENTION_DAYS__ DAY;
+
+DELETE FROM servicio
+WHERE fecha_fin IS NOT NULL
+  AND fecha_fin < NOW() - INTERVAL __RETENTION_DAYS__ DAY
+  AND id NOT IN (SELECT servicio_id FROM usuario_servicio WHERE servicio_id IS NOT NULL)
+  AND id NOT IN (SELECT servicio_id FROM servicio_app WHERE servicio_id IS NOT NULL)
+  AND id NOT IN (SELECT servicio_id FROM servicio_dispositivo WHERE servicio_id IS NOT NULL);
+MYSQLEOF
+)
+    mysql_sql="\${mysql_sql//__RETENTION_DAYS__/\$DATA_RETENTION_DAYS}"
+
+    docker exec \
+        -e MYSQL_PWD="\${MYSQL_PASSWORD:-}" \
+        iot-mysql mysql \
+            -u "\${MYSQL_USER:-iot_user}" \
+            "\${MYSQL_DATABASE:-iot_platform}" \
+            -e "\$mysql_sql" >/dev/null 2>&1 || log_msg "Purga MySQL falló; revisar contenedor iot-mysql"
+}
+
+purge_data_storage() {
+    log_msg "Ejecutando purga data con retención de \${DATA_RETENTION_DAYS} días"
+    purge_mongodb_data
+    purge_mysql_data
+}
+
+max_usage=0
+for path in / "\$INSTALL_DIR"; do
+    if [[ -e "\$path" ]]; then
+        current=\$(usage_pct "\$path")
+        if [[ -n "\$current" && "\$current" -gt "\$max_usage" ]]; then
+            max_usage="\$current"
+        fi
+    fi
+done
+
+if [[ "\$max_usage" -ge "\$WARN_PCT" ]]; then
+    log_msg "Uso de almacenamiento en \${max_usage}%, modo de purga: \${STORAGE_PURGE_MODE}"
+    case "\$STORAGE_PURGE_MODE" in
+        system)
+            purge_system_storage
+            ;;
+        data)
+            purge_data_storage
+            ;;
+        both)
+            purge_system_storage
+            purge_data_storage
+            ;;
+        none)
+            log_msg "Purga automática desactivada; alerta solamente"
+            ;;
+    esac
+else
+    rm -f "\$WARNING_FILE"
+fi
+
+max_usage_after=0
+for path in / "\$INSTALL_DIR"; do
+    if [[ -e "\$path" ]]; then
+        current=\$(usage_pct "\$path")
+        if [[ -n "\$current" && "\$current" -gt "\$max_usage_after" ]]; then
+            max_usage_after="\$current"
+        fi
+    fi
+done
+
+if [[ "\$max_usage_after" -ge "\$WARN_PCT" && "\$STORAGE_ALERTS" == "true" ]]; then
+    {
+        echo "ADVERTENCIA IoT: almacenamiento al \${max_usage_after}%."
+        echo "Alertas activas. Modo de purga: \${STORAGE_PURGE_MODE}."
+        echo "Retención de datos configurada: \${DATA_RETENTION_DAYS} días."
+        echo "Revisa retencion de datos o agrega almacenamiento externo."
+    } > "\$WARNING_FILE"
+elif [[ "\$STORAGE_ALERTS" != "true" ]]; then
+    rm -f "\$WARNING_FILE"
+fi
+
+if [[ "\$max_usage_after" -ge "\$CRITICAL_PCT" ]]; then
+    log_msg "CRITICO: almacenamiento en \${max_usage_after}% despues de mantenimiento, modo de purga: \${STORAGE_PURGE_MODE}"
+else
+    log_msg "Mantenimiento completado, uso maximo \${max_usage_after}%"
+fi
+MAINTENANCEEOF
+
+    chmod 755 /usr/local/sbin/iot-storage-maintenance
+
+    if [[ "$alerts_enabled" == true ]]; then
+        cat > /etc/profile.d/iot-storage-warning.sh << 'PROFILEEOF'
+warning_file="/var/lib/iot-platform-maintenance/storage-warning"
+if [ -r "$warning_file" ]; then
+    printf '\n'
+    cat "$warning_file"
+    printf '\n\n'
+fi
+PROFILEEOF
+        chmod 644 /etc/profile.d/iot-storage-warning.sh
+    else
+        rm -f /etc/profile.d/iot-storage-warning.sh
+    fi
+
+    if [[ "$autopurge_enabled" == true ]]; then
+        cat > /etc/logrotate.d/iot-platform << LOGROTATEEOF
+$install_dir/logs/*.log $install_dir/logs/*/*.log /var/log/iot-platform-maintenance.log /var/log/iot-platform-cleanup.log {
+    daily
+    rotate $rotate_count
+    maxsize $log_max_size
+    missingok
+    notifempty
+    compress
+    copytruncate
+}
+LOGROTATEEOF
+    else
+        rm -f /etc/logrotate.d/iot-platform
+    fi
+
+    cat > /etc/systemd/system/iot-storage-maintenance.service << 'SERVICEEOF'
+[Unit]
+Description=IoT Platform storage maintenance
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/iot-storage-maintenance
+SERVICEEOF
+
+    cat > /etc/systemd/system/iot-storage-maintenance.timer << TIMEREOF
+[Unit]
+Description=Run IoT Platform storage maintenance periodically
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=$timer_interval
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMEREOF
+
+    systemctl daemon-reload
+    systemctl enable --now iot-storage-maintenance.timer >> "$LOG_FILE" 2>&1 || true
+    systemctl start iot-storage-maintenance.service >> "$LOG_FILE" 2>&1 || true
+}
+
+count_healthy_containers() {
+    local count=0
+    local id status
+
+    for id in $(docker compose ps -q 2>/dev/null); do
+        status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null || true)
+        if [[ "$status" == "healthy" ]]; then
+            count=$((count + 1))
+        fi
+    done
+
+    echo "$count"
 }
 
 backup_file() {
@@ -93,6 +644,7 @@ phase_1_user_management() {
     show_task "Actualizando paquetes del sistema" "running"
     exec_cmd "apt-get update" "Actualizar lista de paquetes"
     exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get upgrade -y" "Actualizar paquetes"
+    exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y sudo openssh-server passwd" "Instalar sudo y OpenSSH Server"
     complete_task "Sistema actualizado"
 
     show_task "Creando usuario: $NEW_USERNAME" "running"
@@ -119,10 +671,12 @@ phase_1_user_management() {
     usermod -aG sudo "$NEW_USERNAME"
     complete_task "Privilegios sudo otorgados"
 
-    show_task "Configurando sudo sin contraseña" "running"
-    echo "$NEW_USERNAME ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$NEW_USERNAME"
+    show_task "Configurando sudo temporal para reanudación" "running"
+    local sudo_resume_cmd="/home/$NEW_USERNAME/iot-platform-installer/install.sh --internal-resume"
+    printf '%s ALL=(ALL) NOPASSWD: %s\n' "$NEW_USERNAME" "$sudo_resume_cmd" > "/etc/sudoers.d/$NEW_USERNAME"
     chmod 440 "/etc/sudoers.d/$NEW_USERNAME"
-    complete_task "Sudo configurado"
+    visudo -cf "/etc/sudoers.d/$NEW_USERNAME" >> "$LOG_FILE" 2>&1
+    complete_task "Sudo temporal configurado"
 
     show_task "Configurando directorio home" "running"
     mkdir -p "/home/$NEW_USERNAME"
@@ -160,7 +714,9 @@ phase_1_user_management() {
     fi
     
     local escaped_password
-    escaped_password=$(printf '%s' "$ADMIN_PASSWORD" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\$/\\$/g' -e 's/`/\\`/g')
+    escaped_password=$(escape_double_quoted_value "$ADMIN_PASSWORD")
+
+    MONGO_IMAGE=${MONGO_IMAGE:-$(select_mongo_image)}
     
     cat > "$new_config" << NEWCONFEOF
 # Configuración de Instalación de Plataforma IoT
@@ -174,6 +730,22 @@ DB_NAME="$DB_NAME"
 DOCKER_SUBNET="$DOCKER_SUBNET"
 REDIS_MEMORY="$REDIS_MEMORY"
 TIMEZONE="$TIMEZONE"
+MONGO_IMAGE="$MONGO_IMAGE"
+ALLOW_LEGACY_PI4_MONGODB="${ALLOW_LEGACY_PI4_MONGODB:-false}"
+RESOURCE_PROFILE="${RESOURCE_PROFILE}"
+RESOURCE_PROFILE_SOURCE="${RESOURCE_PROFILE_SOURCE:-auto}"
+COMPACT_STORAGE="${COMPACT_STORAGE}"
+COMPACT_STORAGE_SOURCE="${COMPACT_STORAGE_SOURCE:-auto}"
+SAFE_AUTOPURGE="${SAFE_AUTOPURGE:-false}"
+SAFE_AUTOPURGE_SOURCE="${SAFE_AUTOPURGE_SOURCE:-auto}"
+STORAGE_ALERTS="${STORAGE_ALERTS:-true}"
+STORAGE_ALERTS_SOURCE="${STORAGE_ALERTS_SOURCE:-auto}"
+STORAGE_PURGE_MODE="${STORAGE_PURGE_MODE:-none}"
+STORAGE_PURGE_MODE_SOURCE="${STORAGE_PURGE_MODE_SOURCE:-auto}"
+DATA_RETENTION_DAYS="${DATA_RETENTION_DAYS:-30}"
+STORAGE_TOTAL_MB="${STORAGE_TOTAL_MB:-0}"
+STORAGE_USED_MB="${STORAGE_USED_MB:-0}"
+STORAGE_AVAILABLE_MB="${STORAGE_AVAILABLE_MB:-0}"
 
 # Credenciales de Administrador
 ADMIN_EMAIL="$ADMIN_EMAIL"
@@ -213,55 +785,57 @@ STATEEOF
     timedatectl set-timezone "$TIMEZONE" 2>/dev/null || true
     complete_task "Zona horaria establecida"
 
-    if id "debian" &>/dev/null; then
-        log_success "Fase 1 completada"
-        
-        echo ""
-        echo -e "${RED}╔══════════════════════════════════════════════════════════════════════════════╗${RESET}"
-        echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${BOLD}¡¡¡ IMPORTANTE - GUARDA ESTAS CREDENCIALES AHORA !!!${RESET}                       ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
-        echo -e "${RED}╠══════════════════════════════════════════════════════════════════════════════╣${RESET}"
-        echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${BOLD}Usuario SSH:${RESET}     ${GREEN}$NEW_USERNAME${RESET}                                              ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${BOLD}Contraseña:${RESET}      ${GREEN}$temp_password${RESET}                                  ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${BOLD}Puerto SSH:${RESET}      ${GREEN}$SSH_PORT${RESET}                                                    ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${BOLD}Servidor:${RESET}        ${GREEN}$VPS_IP${RESET}                                              ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${YELLOW}Comando de conexión:${RESET}                                                     ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${CYAN}ssh $NEW_USERNAME@$VPS_IP -p $SSH_PORT${RESET}                                    ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}   ${YELLOW}También guardado en: ~/.iot-platform/.secrets${RESET}                            ${RED}║${RESET}"
-        echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
-        echo -e "${RED}╚══════════════════════════════════════════════════════════════════════════════╝${RESET}"
-        echo ""
-        echo -e "${YELLOW}Presiona ENTER cuando hayas guardado las credenciales...${RESET}"
-        read -p ""
-        
-        echo ""
-        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${RESET}"
-        echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${BOLD}TRANSICIÓN AUTOMÁTICA DE USUARIO${RESET}                                          ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
-        echo -e "${CYAN}╠══════════════════════════════════════════════════════════════════════════════╣${RESET}"
-        echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${GREEN}[OK]${RESET} Usuario ${YELLOW}$NEW_USERNAME${RESET} creado exitosamente                               ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${GREEN}[OK]${RESET} Permisos de administrador (sudo) otorgados                             ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${GREEN}[OK]${RESET} Instalador copiado a /home/$NEW_USERNAME/                               ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${BOLD}Continuando instalación automáticamente como $NEW_USERNAME...${RESET}              ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}   ${YELLOW}(El usuario debian será eliminado al final de la instalación)${RESET}              ${CYAN}║${RESET}"
-        echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
-        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${RESET}"
-        echo ""
-        
-        sleep 3
-        
-        log_info "Ejecutando transición a usuario $NEW_USERNAME..."
-        exec runuser -l "$NEW_USERNAME" -c "cd /home/$NEW_USERNAME/iot-platform-installer && sudo ./install.sh --internal-resume"
+    log_success "Fase 1 completada"
+
+    local display_password
+    if [[ -n "$temp_password" ]]; then
+        display_password="$temp_password"
+    else
+        display_password="[usuario existente; usa su contraseña actual]"
     fi
 
-    log_success "Fase 1 completada"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}   ${BOLD}¡¡¡ IMPORTANTE - GUARDA ESTAS CREDENCIALES AHORA !!!${RESET}                       ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════════════╣${RESET}"
+    echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}   ${BOLD}Usuario SSH:${RESET}     ${GREEN}$NEW_USERNAME${RESET}                                              ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}   ${BOLD}Contraseña:${RESET}      ${GREEN}$display_password${RESET}"
+    echo -e "${RED}║${RESET}   ${BOLD}Puerto SSH:${RESET}      ${GREEN}$SSH_PORT${RESET}                                                    ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}   ${BOLD}Servidor:${RESET}        ${GREEN}$VPS_IP${RESET}                                              ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}   ${YELLOW}Comando de conexión:${RESET}                                                     ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}   ${CYAN}ssh $NEW_USERNAME@$VPS_IP -p $SSH_PORT${RESET}                                    ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}   ${YELLOW}También guardado en: ~/.iot-platform/.secrets${RESET}                            ${RED}║${RESET}"
+    echo -e "${RED}║${RESET}                                                                              ${RED}║${RESET}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+    echo -e "${YELLOW}Presiona ENTER cuando hayas guardado las credenciales...${RESET}"
+    read -p ""
+
+    echo ""
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}   ${BOLD}TRANSICIÓN AUTOMÁTICA DE USUARIO${RESET}                                          ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
+    echo -e "${CYAN}╠══════════════════════════════════════════════════════════════════════════════╣${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}   ${GREEN}[OK]${RESET} Usuario ${YELLOW}$NEW_USERNAME${RESET} preparado                                      ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}   ${GREEN}[OK]${RESET} Permisos de administrador (sudo) otorgados                             ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}   ${GREEN}[OK]${RESET} Instalador copiado a /home/$NEW_USERNAME/                               ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}   ${BOLD}Continuando instalación automáticamente como $NEW_USERNAME...${RESET}              ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${RESET}                                                                              ${CYAN}║${RESET}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+
+    sleep 3
+
+    log_info "Ejecutando transición a usuario $NEW_USERNAME..."
+    exec runuser -l "$NEW_USERNAME" -c "cd /home/$NEW_USERNAME/iot-platform-installer && sudo -n /home/$NEW_USERNAME/iot-platform-installer/install.sh --internal-resume"
 }
 
 ################################################################################
@@ -302,6 +876,10 @@ phase_2_dependencies() {
         systemctl enable atd 2>/dev/null || true
         systemctl start atd 2>/dev/null || true
     fi
+
+    show_task "Configurando swap low-resource si aplica" "running"
+    ensure_low_resource_swap
+    complete_task "Swap low-resource verificado"
     
     log_success "Fase 2 completada"
 }
@@ -330,6 +908,7 @@ phase_3_firewall() {
     
     show_task "Habilitando y reiniciando nftables" "running"
     if [[ "$DRY_RUN" != true ]]; then
+        nft -c -f /etc/nftables.conf
         systemctl enable nftables
         systemctl restart nftables
     fi
@@ -350,8 +929,14 @@ phase_4_fail2ban() {
     local nginx_log_path="${INSTALL_DIR:-/home/${NEW_USERNAME}/iot-platform}/logs/nginx"
     
     show_task "Instalando Fail2Ban" "running"
-    exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban" "Instalar Fail2Ban"
+    exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban iptables" "Instalar Fail2Ban"
     complete_task "Fail2Ban instalado"
+
+    show_task "Preparando cadena DOCKER-USER" "running"
+    if [[ "$DRY_RUN" != true ]]; then
+        ensure_docker_user_chain
+    fi
+    complete_task "Cadena DOCKER-USER preparada"
     
     show_task "Instalando filtros nginx desde templates" "running"
     if [[ "$DRY_RUN" != true ]]; then
@@ -407,6 +992,43 @@ ignoreregex =
 datepattern = {^LN-BEG}
 FILTEREOF
         log_info "Filtro nginx-limit-req instalado"
+
+        if [[ -f "$SCRIPT_DIR/templates/fail2ban-action.conf.tpl" ]]; then
+            cp "$SCRIPT_DIR/templates/fail2ban-action.conf.tpl" /etc/fail2ban/action.d/nftables-custom.conf
+        else
+            cat > /etc/fail2ban/action.d/nftables-custom.conf << 'ACTIONEOF'
+[Definition]
+
+actionstart =
+
+actionstop =
+
+actioncheck = nft list set inet iot_filter fail2ban_blacklist >/dev/null
+
+actionban = nft add element inet iot_filter fail2ban_blacklist { <ip> timeout 1h }
+
+actionunban = nft delete element inet iot_filter fail2ban_blacklist { <ip> }
+ACTIONEOF
+        fi
+        log_info "Acción nftables-custom instalada"
+
+        cat > /etc/fail2ban/action.d/docker-user-allports.conf << 'ACTIONEOF'
+[Definition]
+
+# Banea tráfico publicado por Docker antes de las reglas generadas por Docker.
+# Docker enruta puertos publicados por FORWARD/DOCKER-USER, no por INPUT.
+actionstart = iptables -N DOCKER-USER 2>/dev/null || true
+              iptables -C DOCKER-USER -j RETURN 2>/dev/null || iptables -A DOCKER-USER -j RETURN
+
+actionstop =
+
+actioncheck = iptables -n -L DOCKER-USER >/dev/null
+
+actionban = iptables -I DOCKER-USER 1 -s <ip> -j DROP
+
+actionunban = iptables -D DOCKER-USER -s <ip> -j DROP
+ACTIONEOF
+        log_info "Acción docker-user-allports instalada"
     fi
     complete_task "Filtros nginx instalados"
     
@@ -417,7 +1039,8 @@ FILTEREOF
         cat > /etc/fail2ban/jail.local << JAILEOF
 # =============================================================================
 # Configuración de Jail de Fail2Ban
-# Jails de SSH + Nginx con backend de nftables
+# SSH usa firewall del host; Nginx usa DOCKER-USER porque el tráfico HTTP/HTTPS
+# publicado por Docker no pasa por la cadena INPUT del host.
 # =============================================================================
 
 [DEFAULT]
@@ -425,8 +1048,8 @@ bantime  = 3600
 findtime = 600
 maxretry = 5
 backend  = polling
-banaction = nftables-allports
-ignoreip = 127.0.0.1/8 ::1 172.20.0.0/16
+banaction = nftables-custom
+ignoreip = 127.0.0.1/8 ::1 $DOCKER_SUBNET
 
 # =============================================================================
 # SSH Protection
@@ -448,6 +1071,7 @@ enabled  = true
 port     = http,https
 filter   = nginx-http-auth
 logpath  = ${nginx_log_path}/iot-api-access.log
+banaction = docker-user-allports
 maxretry = 10
 bantime  = 1800
 findtime = 600
@@ -460,6 +1084,7 @@ enabled  = true
 port     = http,https
 filter   = nginx-botsearch
 logpath  = ${nginx_log_path}/iot-api-access.log
+banaction = docker-user-allports
 maxretry = 3
 bantime  = 86400
 findtime = 3600
@@ -472,6 +1097,7 @@ enabled  = true
 port     = http,https
 filter   = nginx-badbots
 logpath  = ${nginx_log_path}/iot-api-access.log
+banaction = docker-user-allports
 maxretry = 1
 bantime  = 86400
 findtime = 86400
@@ -484,6 +1110,7 @@ enabled  = true
 port     = http,https
 filter   = nginx-limit-req
 logpath  = ${nginx_log_path}/iot-api-access.log
+banaction = docker-user-allports
 maxretry = 10
 bantime  = 600
 findtime = 120
@@ -595,7 +1222,9 @@ SSHEOF
     
     show_task "Reiniciando servicio SSH" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        systemctl restart sshd
+        local ssh_service
+        ssh_service=$(detect_ssh_service)
+        systemctl restart "$ssh_service"
     fi
     complete_task "SSH reiniciado"
     
@@ -625,31 +1254,95 @@ phase_6_docker() {
     log_info "Iniciando Fase 6: Instalación de Docker"
     
     source "$CONFIG_FILE"
+
+    local docker_arch docker_codename docker_repo_url docker_keyring docker_source_file docker_install_source
+    docker_arch=$(detect_architecture)
+    docker_codename=$(detect_os_codename)
+    docker_repo_url="https://download.docker.com/linux/debian"
+    docker_keyring="/etc/apt/keyrings/docker.asc"
+    docker_source_file="/etc/apt/sources.list.d/docker.sources"
+    docker_install_source="official"
+
+    if [[ -z "$docker_codename" ]]; then
+        log_error "No se pudo detectar VERSION_CODENAME desde /etc/os-release"
+        return 1
+    fi
+
+    case "$docker_arch" in
+        amd64|arm64)
+            ;;
+        *)
+            log_error "Arquitectura no soportada para Docker en este stack: $docker_arch"
+            return 1
+            ;;
+    esac
+
+    show_task "Eliminando paquetes Docker conflictivos" "running"
+    exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get remove -y docker.io docker-doc docker-compose podman-docker containerd runc || true" "Eliminar paquetes Docker conflictivos"
+    complete_task "Paquetes conflictivos eliminados"
     
     show_task "Añadiendo clave GPG de Docker" "running"
     if [[ "$DRY_RUN" != true ]]; then
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-        chmod a+r /etc/apt/keyrings/docker.gpg
+        rm -f /etc/apt/keyrings/docker.gpg "$docker_keyring"
+        curl -fsSL "${docker_repo_url}/gpg" -o "$docker_keyring"
+        chmod a+r "$docker_keyring"
     fi
     complete_task "Clave GPG añadida"
     
     show_task "Añadiendo repositorio de Docker" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        echo \
-            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-            $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-            tee /etc/apt/sources.list.d/docker.list > /dev/null
+        rm -f /etc/apt/sources.list.d/docker.list "$docker_source_file"
+        cat > "$docker_source_file" << DOCKEREOF
+Types: deb
+URIs: $docker_repo_url
+Suites: $docker_codename
+Components: stable
+Architectures: $docker_arch
+Signed-By: $docker_keyring
+DOCKEREOF
     fi
     complete_task "Repositorio añadido"
     
     show_task "Actualizando índice de paquetes" "running"
     exec_cmd "apt-get update" "Actualizar índice"
     complete_task "Índice actualizado"
+
+    show_task "Validando disponibilidad de Docker Engine" "running"
+    if [[ "$DRY_RUN" != true ]]; then
+        if apt_package_available docker-ce && apt_package_available docker-ce-cli && apt_package_available containerd.io && apt_package_available docker-compose-plugin; then
+            log_info "Docker CE disponible: docker-ce $(apt_package_candidate docker-ce)"
+        else
+            log_warning "El repositorio oficial de Docker no expone un conjunto completo para ${docker_codename}/${docker_arch} en este host."
+            {
+                echo "=== Docker official package policy ==="
+                apt-cache policy docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || true
+            } >> "$LOG_FILE" 2>&1
+
+            if apt_package_available docker.io && apt_package_available docker-compose; then
+                docker_install_source="debian"
+                log_warning "Fallback activado: se instalarán paquetes Debian docker.io + docker-compose."
+                log_warning "Esto mantiene el instalador funcional en Debian 13 ARM64 cuando Docker CE no aparece como candidato APT."
+            else
+                log_error "No hay paquetes Docker instalables para ${docker_codename}/${docker_arch}"
+                log_error "Revisa conectividad, repositorios APT y el log: $LOG_FILE"
+                return 1
+            fi
+        fi
+    fi
+    complete_task "Docker Engine disponible"
     
     show_task "Instalando Docker Engine" "running"
-    exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" "Instalar Docker"
+    if [[ "$docker_install_source" == "official" ]]; then
+        exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin" "Instalar Docker CE"
+    else
+        exec_cmd "DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose" "Instalar Docker desde Debian"
+    fi
     complete_task "Docker instalado"
+
+    show_task "Configurando daemon Docker" "running"
+    configure_docker_daemon_logging
+    complete_task "Daemon Docker configurado"
     
     show_task "Añadiendo usuario al grupo docker" "running"
     if [[ "$DRY_RUN" != true ]]; then
@@ -660,9 +1353,15 @@ phase_6_docker() {
     show_task "Habilitando servicio Docker" "running"
     if [[ "$DRY_RUN" != true ]]; then
         systemctl enable docker
-        systemctl start docker
+        systemctl restart docker
+        docker version >> "$LOG_FILE" 2>&1
+        docker compose version >> "$LOG_FILE" 2>&1
     fi
     complete_task "Docker habilitado"
+
+    show_task "Validando Docker Registry" "running"
+    validate_docker_registry_access
+    complete_task "Docker Registry validado"
     
     log_success "Fase 6 completada"
 }
@@ -677,6 +1376,8 @@ phase_7_project_structure() {
     source "$CONFIG_FILE"
     source "$SECRETS_FILE"
     local install_dir="$INSTALL_DIR"
+    local mongo_image="${MONGO_IMAGE:-$DEFAULT_MONGO_IMAGE}"
+    set_resource_tuning_defaults
     
     show_task "Verificando directorios del proyecto" "running"
     if [[ "$DRY_RUN" != true ]]; then
@@ -693,6 +1394,21 @@ phase_7_project_structure() {
             -e "s|{{MONGO_PASSWORD}}|$MONGO_PASSWORD|g" \
             -e "s|{{SECRET_KEY}}|$SECRET_KEY|g" \
             -e "s|{{DB_NAME}}|$DB_NAME|g" \
+            -e "s|{{MONGO_IMAGE}}|$mongo_image|g" \
+            -e "s|{{REDIS_MEMORY}}|$REDIS_MEMORY|g" \
+            -e "s|{{TIMEZONE}}|$TIMEZONE|g" \
+            -e "s|{{RESOURCE_PROFILE}}|$RESOURCE_PROFILE|g" \
+            -e "s|{{COMPACT_STORAGE}}|$COMPACT_STORAGE|g" \
+            -e "s|{{SAFE_AUTOPURGE}}|${SAFE_AUTOPURGE:-false}|g" \
+            -e "s|{{STORAGE_ALERTS}}|${STORAGE_ALERTS:-true}|g" \
+            -e "s|{{STORAGE_PURGE_MODE}}|${STORAGE_PURGE_MODE:-none}|g" \
+            -e "s|{{DATA_RETENTION_DAYS}}|${DATA_RETENTION_DAYS:-30}|g" \
+            -e "s|{{STORAGE_TOTAL_MB}}|${STORAGE_TOTAL_MB:-0}|g" \
+            -e "s|{{STORAGE_AVAILABLE_MB}}|${STORAGE_AVAILABLE_MB:-0}|g" \
+            -e "s|{{MYSQL_INNODB_BUFFER_POOL}}|$MYSQL_INNODB_BUFFER_POOL|g" \
+            -e "s|{{MYSQL_MAX_CONNECTIONS}}|$MYSQL_MAX_CONNECTIONS|g" \
+            -e "s|{{MONGO_WIREDTIGER_CACHE}}|$MONGO_WIREDTIGER_CACHE|g" \
+            -e "s|{{FASTAPI_WORKERS}}|$FASTAPI_WORKERS|g" \
             "$SCRIPT_DIR/templates/env.tpl" > "$install_dir/.env"
         
         chmod 600 "$install_dir/.env"
@@ -799,6 +1515,7 @@ phase_9_mysql_init() {
             -e "s|{{ADMIN_EMAIL}}|$admin_email|g" \
             -e "s|{{DEVICE_API_KEY}}|$DEVICE_API_KEY|g" \
             -e "s|{{DEVICE_ENCRYPTION_KEY}}|$DEVICE_ENCRYPTION_KEY|g" \
+            -e "s|{{DB_NAME}}|$DB_NAME|g" \
             "$SCRIPT_DIR/templates/mysql-init.sql.tpl" > "$install_dir/mysql-init/init.sql"
     fi
     complete_task "Script de inicialización MySQL creado"
@@ -824,7 +1541,8 @@ phase_10_nginx() {
     
     show_task "Copiando configuración de sitio Nginx" "running"
     if [[ "$DRY_RUN" != true ]]; then
-        cp "$SCRIPT_DIR/templates/nginx-site.conf.tpl" "$install_dir/nginx/conf.d/iot-api.conf"
+        sed -e "s|{{DOCKER_SUBNET}}|$DOCKER_SUBNET|g" \
+            "$SCRIPT_DIR/templates/nginx-site.conf.tpl" > "$install_dir/nginx/conf.d/iot-api.conf"
     fi
     complete_task "Configuración de sitio copiada"
     
@@ -840,10 +1558,32 @@ phase_11_deployment() {
     
     source "$CONFIG_FILE"
     local install_dir="$INSTALL_DIR"
+    local mongo_image="${MONGO_IMAGE:-$DEFAULT_MONGO_IMAGE}"
+    set_resource_tuning_defaults
     
     show_task "Creando docker-compose.yml" "running"
     if [[ "$DRY_RUN" != true ]]; then
         sed -e "s|{{DOCKER_SUBNET}}|$DOCKER_SUBNET|g" \
+            -e "s|{{REDIS_MEMORY}}|$REDIS_MEMORY|g" \
+            -e "s|{{MONGO_IMAGE}}|$mongo_image|g" \
+            -e "s|{{MYSQL_COMMAND}}|$MYSQL_COMMAND|g" \
+            -e "s|{{MYSQL_MEM_LIMIT}}|$MYSQL_MEM_LIMIT|g" \
+            -e "s|{{MYSQL_MEM_RESERVATION}}|$MYSQL_MEM_RESERVATION|g" \
+            -e "s|{{MYSQL_CPUS}}|$MYSQL_CPUS|g" \
+            -e "s|{{MONGO_COMMAND}}|$MONGO_COMMAND|g" \
+            -e "s|{{MONGO_MEM_LIMIT}}|$MONGO_MEM_LIMIT|g" \
+            -e "s|{{MONGO_MEM_RESERVATION}}|$MONGO_MEM_RESERVATION|g" \
+            -e "s|{{MONGO_CPUS}}|$MONGO_CPUS|g" \
+            -e "s|{{REDIS_MEM_LIMIT}}|$REDIS_MEM_LIMIT|g" \
+            -e "s|{{REDIS_MEM_RESERVATION}}|$REDIS_MEM_RESERVATION|g" \
+            -e "s|{{REDIS_CPUS}}|$REDIS_CPUS|g" \
+            -e "s|{{FASTAPI_COMMAND}}|$FASTAPI_COMMAND|g" \
+            -e "s|{{FASTAPI_MEM_LIMIT}}|$FASTAPI_MEM_LIMIT|g" \
+            -e "s|{{FASTAPI_MEM_RESERVATION}}|$FASTAPI_MEM_RESERVATION|g" \
+            -e "s|{{FASTAPI_CPUS}}|$FASTAPI_CPUS|g" \
+            -e "s|{{NGINX_MEM_LIMIT}}|$NGINX_MEM_LIMIT|g" \
+            -e "s|{{NGINX_MEM_RESERVATION}}|$NGINX_MEM_RESERVATION|g" \
+            -e "s|{{NGINX_CPUS}}|$NGINX_CPUS|g" \
             "$SCRIPT_DIR/templates/docker-compose.yml.tpl" > "$install_dir/docker-compose.yml"
     fi
     complete_task "docker-compose.yml creado"
@@ -851,6 +1591,10 @@ phase_11_deployment() {
     show_task "Iniciando servicios Docker" "running"
     if [[ "$DRY_RUN" != true ]]; then
         cd "$install_dir"
+        if ! docker compose config --quiet >> "$LOG_FILE" 2>&1; then
+            log_error "docker-compose.yml generado no es válido"
+            return 1
+        fi
         
         log_info "Verificando que Docker esté listo..."
         local docker_wait=0
@@ -863,18 +1607,23 @@ phase_11_deployment() {
             fi
         done
         sleep 5
+        ensure_docker_user_chain
         
         local max_retries=3
         local retry_count=0
         local success=false
+        local compose_output=""
         
         while [[ $retry_count -lt $max_retries ]] && [[ "$success" == false ]]; do
             retry_count=$((retry_count + 1))
             log_info "Intento $retry_count de $max_retries..."
+            compose_output="$install_dir/compose-up-attempt-${retry_count}.log"
             
-            if docker compose up -d >> "$LOG_FILE" 2>&1; then
+            if run_compose_up "$compose_output"; then
+                cat "$compose_output" >> "$LOG_FILE" 2>/dev/null || true
                 success=true
             else
+                cat "$compose_output" >> "$LOG_FILE" 2>/dev/null || true
                 if [[ $retry_count -lt $max_retries ]]; then
                     log_warning "Fallo en intento $retry_count. Reintentando en 10 segundos..."
                     sleep 10
@@ -884,7 +1633,8 @@ phase_11_deployment() {
         
         if [[ "$success" == false ]]; then
             log_error "Docker compose falló después de $max_retries intentos"
-            log_error "Ejecuta manualmente: cd $install_dir && docker compose up -d"
+            collect_deployment_failure_diagnostics "$install_dir" "$compose_output"
+            log_error "Ejecuta manualmente: cd $install_dir && COMPOSE_PARALLEL_LIMIT=1 docker compose --progress plain up -d"
             log_error "Luego reanuda con: sudo ./install.sh --resume"
             return 1
         fi
@@ -899,7 +1649,8 @@ phase_11_deployment() {
         local max_wait=120
         local elapsed=0
         while [[ $elapsed -lt $max_wait ]]; do
-            local healthy=$(docker compose ps 2>/dev/null | grep -c "(healthy)" || echo 0)
+            local healthy
+            healthy=$(count_healthy_containers)
             if [[ $healthy -ge 5 ]]; then
                 break
             fi
@@ -948,14 +1699,18 @@ phase_12_testing() {
         local redis_pass=""
         if [[ -f "$secrets_path" ]]; then
             redis_pass=$(grep 'REDIS_PASSWORD=' "$secrets_path" 2>/dev/null | cut -d'"' -f2)
-            log_info "Redis password encontrada: ${redis_pass:0:4}****"
+            log_info "Redis password encontrada en archivo de secretos"
         else
             log_warning "Archivo de secretos no encontrado: $secrets_path"
         fi
         
+        local admin_payload
+        admin_payload=$(jq -nc --arg email "$admin_email" --arg password "$admin_password" \
+            '{email:$email,password:$password}')
+
         local admin_response=$(curl -s -X POST http://localhost/api/v1/auth/login/admin \
             -H "Content-Type: application/json" \
-            -d "{\"email\":\"$admin_email\",\"password\":\"$admin_password\"}")
+            -d "$admin_payload")
         
         if echo "$admin_response" | grep -q "access_token"; then
             log_success "Autenticación de administrador funciona"
@@ -1096,6 +1851,16 @@ SERVICEEOF
         docker exec -u root iot-fastapi chmod 777 /var/log/fastapi/sessions 2>/dev/null || true
     fi
     complete_task "Permisos de logs configurados"
+
+    show_task "Restaurando sudo con contraseña" "running"
+    if [[ "$DRY_RUN" != true ]]; then
+        restore_sudo_password_requirement
+    fi
+    complete_task "Sudo restaurado"
+
+    show_task "Configurando mantenimiento de almacenamiento" "running"
+    install_storage_maintenance
+    complete_task "Mantenimiento de almacenamiento configurado"
     
     show_task "Recargando Fail2Ban con logs de nginx activos" "running"
     if [[ "$DRY_RUN" != true ]]; then
@@ -1137,7 +1902,8 @@ SERVICEEOF
         fi
         
         cd "$INSTALL_DIR" 2>/dev/null
-        local healthy_containers=$(docker compose ps 2>/dev/null | grep -c "(healthy)" || echo 0)
+        local healthy_containers
+        healthy_containers=$(count_healthy_containers)
         if [[ $healthy_containers -lt 5 ]]; then
             log_warning "Algunos contenedores no están healthy (esperados: 5, healthy: $healthy_containers)"
             issues=$((issues + 1))

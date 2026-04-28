@@ -1,32 +1,21 @@
 #!/usr/sbin/nft -f
 
-flush ruleset
+# Reemplazar solo la tabla propia del installer.
+# No usar "flush ruleset": Docker y Fail2Ban administran reglas propias.
+table inet iot_filter
+delete table inet iot_filter
 
 define SSH_PORT = {{SSH_PORT}}
 define HTTP_PORT = 80
 define HTTPS_PORT = 443
 
-table inet filter {
-    # Conjuntos dinámicos de IP para fail2ban y limitación de tasa
+table inet iot_filter {
+    # Conjunto dinámico usado por la acción custom opcional de Fail2Ban
     set fail2ban_blacklist {
         type ipv4_addr
         flags dynamic, timeout
         size 65536
         timeout 1h
-    }
-    
-    set rate_limit_ssh {
-        type ipv4_addr
-        flags dynamic, timeout
-        size 65536
-        timeout 60s
-    }
-    
-    set rate_limit_api_auth {
-        type ipv4_addr
-        flags dynamic, timeout
-        size 65536
-        timeout 300s
     }
     
     chain input {
@@ -44,10 +33,8 @@ table inet filter {
         # Lista negra de Fail2Ban (máxima prioridad)
         ip saddr @fail2ban_blacklist drop
         
-        # SSH con limitación de tasa (3 conexiones por minuto por IP)
-        tcp dport $SSH_PORT ct state new \
-            add @rate_limit_ssh { ip saddr limit rate 3/minute burst 3 packets } \
-            accept
+        # SSH con limitación de tasa global. Fail2Ban aplica bloqueo por IP.
+        tcp dport $SSH_PORT ct state new limit rate 12/minute burst 6 packets accept
         
         # HTTP/HTTPS con limitación de tasa
         tcp dport $HTTP_PORT ct state new limit rate 10/second burst 10 packets accept

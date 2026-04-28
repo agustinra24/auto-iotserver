@@ -1,13 +1,13 @@
 -- =============================================================================
 -- Plataforma IoT - Inicialización de Base de Datos
--- Generado por el Instalador de Plataforma IoT v2.3
+-- Generado por el Instalador de Plataforma IoT v1.3
 -- =============================================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-CREATE DATABASE IF NOT EXISTS `iot_platform` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `iot_platform`;
+CREATE DATABASE IF NOT EXISTS `{{DB_NAME}}` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `{{DB_NAME}}`;
 
 -- =============================================================================
 -- TABLAS: Sistema RBAC

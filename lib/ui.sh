@@ -165,8 +165,21 @@ show_critical_pause() {
 # Plan de dry-run actualizado para reflejar flujo de terminal único
 show_dry_run_plan() {
     show_section_header "DRY-RUN: Plan de Instalación"
+    local profile_label autopurge_label alerts_label total_display available_display
+    profile_label=$(effective_profile_label)
+    autopurge_label=$(autopurge_mode_label)
+    alerts_label=$(alerts_mode_label)
+    total_display=$(format_storage_mb "${STORAGE_TOTAL_MB:-0}")
+    available_display=$(format_storage_mb "${STORAGE_AVAILABLE_MB:-0}")
     
     echo -e "${BOLD}Las siguientes fases serán ejecutadas:${RESET}
+${BOLD}Perfil detectado:${RESET} ${profile_label}
+${BOLD}Compact storage:${RESET} ${COMPACT_STORAGE}
+${BOLD}Almacenamiento:${RESET} ${total_display} total, ${available_display} libres
+${BOLD}Alertas storage:${RESET} ${alerts_label}
+${BOLD}Modo de purga:${RESET} ${autopurge_label}
+${BOLD}Retención datos:${RESET} ${DATA_RETENTION_DAYS:-$(default_data_retention_days_for_profile)} días
+${BOLD}Dry-run:${RESET} no instala paquetes, no escribe /etc, no crea swap, no guarda .config.env
 
 ${CYAN}[Fase 0]${RESET} Preparación
   • Verificar recursos del sistema
@@ -197,6 +210,7 @@ ${CYAN}[Fase 5]${RESET} Hardening SSH
 ${CYAN}[Fase 6]${RESET} Instalación de Docker
   • Agregar repositorio de Docker
   • Instalar Docker + Docker Compose
+  • Validar Docker Hub con DNS host, HTTPS registry y docker pull hello-world
 
 ${CYAN}[Fase 7]${RESET} Estructura del Proyecto
   • Crear directorio ~/iot-platform
@@ -214,7 +228,8 @@ ${CYAN}[Fase 10]${RESET} Configuración de Nginx
   • Configurar rate limiting
 
 ${CYAN}[Fase 11]${RESET} Despliegue
-  • Desplegar con docker-compose
+  • Desplegar con docker compose --progress plain up -d
+  • En low-resource y compact-storage limitar paralelismo con COMPOSE_PARALLEL_LIMIT=1
   • Esperar health checks
 
 ${CYAN}[Fase 12]${RESET} Pruebas y Validación
@@ -226,18 +241,13 @@ ${CYAN}[Fase 13]${RESET} Limpieza Final ${RED}${RESET}
   • Limpiar archivos temporales
   • Verificación final del sistema
 
-${BOLD}Tiempo Total Estimado:${RESET} ~15 minutos
+${BOLD}Tiempo Total Estimado:${RESET} 10 a 20 minutos en standard; low-resource o compact-storage puede tardar más
 
-${BOLD}Secretos Generados:${RESET}
-  Todas las contraseñas y claves serán auto-generadas y guardadas en:
+${BOLD}Secretos:${RESET}
+  En dry-run no se generan ni escriben secretos.
+  En instalación real se guardarán en:
   ${SECRETS_FILE}
 "
-
-    read -p "¿Proceder con la instalación real? [s/N]: " proceed
-    if [[ "${proceed:-}" =~ ^[sSyY]$ ]]; then
-        return 0
-    fi
-    return 1
 }
 
 show_table() {

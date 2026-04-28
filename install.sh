@@ -1,8 +1,8 @@
 #!/bin/bash
 ################################################################################
-# Plataforma IoT con Seguridad Integrada - Instalador Automatizado v1.2
+# Plataforma IoT con Seguridad Integrada - Instalador Automatizado v1.3
 #
-# Requisitos: Debian 13 (Trixie) limpio, acceso root/sudo
+# Requisitos: Debian 13.x/Trixie o derivado basado en Trixie, acceso root/sudo
 # Ejecución: sudo ./install.sh [--dry-run] [--resume]
 #
 ################################################################################
@@ -24,6 +24,21 @@ LOG_FILE="${SCRIPT_DIR}/logs/install-$(date +%Y%m%d-%H%M%S).log"
 DRY_RUN=false
 RESUME_MODE=false
 INTERNAL_RESUME=false  # Flag interno para continuación automática via runuser
+ALLOW_LEGACY_PI4_MONGODB=false
+RESOURCE_PROFILE="auto"
+RESOURCE_PROFILE_SOURCE="auto"
+COMPACT_STORAGE="auto"
+COMPACT_STORAGE_SOURCE="auto"
+SAFE_AUTOPURGE="auto"
+SAFE_AUTOPURGE_SOURCE="auto"
+STORAGE_ALERTS="true"
+STORAGE_ALERTS_SOURCE="auto"
+STORAGE_PURGE_MODE="none"
+STORAGE_PURGE_MODE_SOURCE="auto"
+DATA_RETENTION_DAYS="auto"
+STORAGE_TOTAL_MB=0
+STORAGE_USED_MB=0
+STORAGE_AVAILABLE_MB=0
 
 ################################################################################
 # Helper: aceptar confirmación s/S/y/Y
@@ -44,33 +59,55 @@ preflight_checks() {
         exit 1
     fi
     
-    if [[ ! -f /etc/debian_version ]]; then
-        log_error "Este script requiere Debian Linux"
+    if [[ ! -f /etc/debian_version ]] || [[ ! -f /etc/os-release ]]; then
+        log_error "Este script requiere Debian Linux o un derivado Debian compatible"
         exit 1
     fi
-    
-    local debian_version
-    debian_version=$(cat /etc/debian_version | cut -d. -f1)
-    if [[ "$debian_version" != "13" ]] && [[ "$debian_version" != "trixie"* ]]; then
-        log_warning "Este script está diseñado para Debian 13 (Trixie)"
-        log_warning "Tu versión: $(cat /etc/debian_version)"
-        read -p "¿Continuar de todos modos? [s/N]: " confirm
-        if ! is_yes "$confirm"; then
-            exit 1
-        fi
+
+    if [[ ("$INTERNAL_RESUME" == true || "$RESUME_MODE" == true) && -f "$CONFIG_FILE" ]]; then
+        source "$CONFIG_FILE"
     fi
-    
+
+    ensure_platform_supported
+    resolve_installation_profiles || exit 1
+
     local required_cmds=("git" "curl" "openssl" "bc")
+    local missing_cmds=()
     for cmd in "${required_cmds[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
-            log_error "Comando requerido no encontrado: $cmd"
-            log_error "Por favor instala: apt-get update && apt-get install -y $cmd"
-            exit 1
+            missing_cmds+=("$cmd")
         fi
     done
-    
-    if ! curl -s --max-time 5 https://google.com > /dev/null 2>&1; then
+
+    if [[ ${#missing_cmds[@]} -gt 0 ]]; then
+        log_warning "Dependencias minimas faltantes: ${missing_cmds[*]}"
+        if [[ "$DRY_RUN" == true ]]; then
+            log_info "[DRY-RUN] No se instalarán paquetes. En instalación real se ejecutaría apt-get update e instalación de: ca-certificates ${missing_cmds[*]}"
+        else
+            log_info "Instalando dependencias minimas de preflight..."
+            DEBIAN_FRONTEND=noninteractive apt-get update >> "$LOG_FILE" 2>&1
+            DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates "${missing_cmds[@]}" >> "$LOG_FILE" 2>&1
+        fi
+    fi
+
+    if ! command -v curl &> /dev/null; then
+        if [[ "$DRY_RUN" == true ]]; then
+            log_warning "[DRY-RUN] curl no está instalado; se omite prueba de conectividad Docker y se reporta como acción pendiente."
+            log_success "Verificaciones previas completadas"
+            return 0
+        fi
+        log_error "curl no está disponible después de instalar dependencias mínimas"
+        exit 1
+    fi
+
+    if ! curl -fsSL --max-time 10 https://download.docker.com > /dev/null 2>&1; then
+        if [[ "$DRY_RUN" == true ]]; then
+            log_warning "[DRY-RUN] No se pudo alcanzar https://download.docker.com; en instalación real se requiere conectividad antes de Docker."
+            log_success "Verificaciones previas completadas"
+            return 0
+        fi
         log_error "No se detectó conectividad a internet"
+        log_error "No se pudo alcanzar https://download.docker.com, requerido para instalar Docker Engine."
         exit 1
     fi
     
@@ -95,6 +132,26 @@ parse_arguments() {
                 # Flag interno usado por runuser para continuación automática
                 # No requiere archivo de estado - comienza desde fase 2
                 INTERNAL_RESUME=true
+                shift
+                ;;
+            --allow-legacy-pi4-mongodb)
+                # Permite Raspberry Pi 4/400/CM4 con MongoDB 4.4 EOL.
+                # Solo laboratorio/compatibilidad temporal, nunca default.
+                ALLOW_LEGACY_PI4_MONGODB=true
+                shift
+                ;;
+            --low-resource)
+                # Override avanzado para pruebas reproducibles.
+                RESOURCE_PROFILE="low-resource"
+                RESOURCE_PROFILE_SOURCE="manual"
+                shift
+                ;;
+            --compact-storage)
+                # Override avanzado para pruebas reproducibles en almacenamiento pequeño.
+                COMPACT_STORAGE=true
+                COMPACT_STORAGE_SOURCE="manual"
+                RESOURCE_PROFILE="low-resource"
+                RESOURCE_PROFILE_SOURCE="manual"
                 shift
                 ;;
             -h|--help)
@@ -125,16 +182,33 @@ OPCIONES:
     --resume        Reanudar desde el último punto de control exitoso
     -h, --help      Mostrar este mensaje de ayuda
 
+OPCIONES AVANZADAS:
+    --low-resource  Activar perfil optimizado para 2GB RAM nominales
+                    manualmente. Normalmente se detecta solo.
+    --compact-storage
+                    Forzar perfil compacto para hosts con poco espacio libre.
+                    Normalmente se detecta solo.
+    --allow-legacy-pi4-mongodb
+                    Permitir Raspberry Pi 4/400/CM4 usando MongoDB 4.4 EOL
+                    sin prompt interactivo. Solo laboratorio o compatibilidad temporal.
+
 EJEMPLOS:
-    sudo ./install.sh              # Instalación normal
+    sudo ./install.sh              # Instalación normal con autodetección
     sudo ./install.sh --dry-run    # Vista previa sin cambios
     sudo ./install.sh --resume     # Reanudar después de interrupción
 
 REQUISITOS:
-    - VPS Debian 13 (Trixie) limpio
+    - Debian 13.x (Trixie) limpio o derivado basado en Trixie
+    - Arquitectura amd64 o arm64
+    - Raspberry Pi 4 se detecta automaticamente y pide confirmación para modo legacy
     - Acceso root o sudo
-    - Conectividad a internet
-    - Mínimo 4GB RAM, 20GB disco
+    - Conectividad a internet y acceso DNS/HTTPS a Docker Hub
+    - Autodetección:
+      standard: 4GB RAM nominales y 20GB libres
+      low-resource: 2GB RAM nominales, 4 cores recomendados y 20GB libres
+      compact-storage: 2GB RAM nominales, menos de 20GB libres y 5GB libres reales mínimos
+    - En compact-storage se pregunta por alertas y modo de purga:
+      system, data, both o none.
 EOF
 }
 
@@ -144,6 +218,12 @@ EOF
 show_welcome() {
     clear
     show_banner "Plataforma IoT con Seguridad Integrada"
+    local profile_label autopurge_label alerts_label total_display available_display
+    profile_label=$(effective_profile_label)
+    autopurge_label=$(autopurge_mode_label)
+    alerts_label=$(alerts_mode_label)
+    total_display=$(format_storage_mb "${STORAGE_TOTAL_MB:-0}")
+    available_display=$(format_storage_mb "${STORAGE_AVAILABLE_MB:-0}")
     
     echo -e "
 ${BLUE}═══════════════════════════════════════════════════════════════════${RESET}
@@ -160,10 +240,16 @@ Este script hará:
   • Configurar seguridad de grado producción (5 capas)
 
 ${RED}REQUISITOS CRÍTICOS:${RESET}
-  - VPS Debian 13 limpio (no sistema de producción)
+  - Debian 13.x/Trixie o derivado basado en Trixie (no sistema de producción)
+  - Arquitectura amd64 o arm64
   - Conexión a internet estable
-  - ~10 minutos de tiempo dedicado
-  - Acceso a consola VPS (en caso de que SSH falle)
+  - Acceso DNS/HTTPS a Docker Hub; el installer intentará reparar DNS común de VM/NAT
+  - Perfil detectado: ${profile_label}
+  - Almacenamiento detectado: ${total_display} total, ${available_display} libres
+  - Alertas de almacenamiento: ${alerts_label}
+  - Purga automática: ${autopurge_label}
+  - 10 a 20 minutos en standard; en 2GB RAM o compact-storage puede tardar más
+  - Acceso a consola local/proveedor (en caso de que SSH falle)
 
 ${GREEN}LO QUE OBTENDRÁS:${RESET}
   - Plataforma IoT completa con backend FastAPI
@@ -265,8 +351,8 @@ collect_user_inputs() {
     local detected_ip
     detected_ip=$(hostname -I | awk '{print $1}')
     
-    # Dirección IP del VPS
-    read -p "Dirección IP del VPS [${detected_ip}]: " VPS_IP
+    # Dirección IP del servidor
+    read -p "Dirección IP del servidor [${detected_ip}]: " VPS_IP
     VPS_IP=${VPS_IP:-$detected_ip}
     validate_ip "$VPS_IP" || { log_error "Dirección IP inválida"; exit 1; }
     
@@ -295,14 +381,104 @@ collect_user_inputs() {
     validate_subnet "$DOCKER_SUBNET" || { log_error "Subred inválida"; exit 1; }
     
     # Límite de memoria Redis
-    read -p "Límite de memoria Redis [256MB]: " REDIS_MEMORY
-    REDIS_MEMORY=${REDIS_MEMORY:-256MB}
+    resolve_installation_profiles || { log_error "No se pudo detectar el perfil de recursos"; exit 1; }
+    validate_resource_profile "$RESOURCE_PROFILE" || { log_error "Perfil de recursos inválido"; exit 1; }
+
+    echo ""
+    local profile_label total_display available_display
+    profile_label=$(effective_profile_label)
+    total_display=$(format_storage_mb "${STORAGE_TOTAL_MB:-$(storage_total_mb)}")
+    available_display=$(format_storage_mb "${STORAGE_AVAILABLE_MB:-$(storage_available_mb)}")
+    echo -e "${YELLOW}Perfil detectado:${RESET} ${profile_label}"
+    echo -e "${YELLOW}Almacenamiento detectado:${RESET} ${total_display} total, ${available_display} libres"
+    if is_low_resource_profile; then
+        log_warning "2GB RAM nominales es válido para laboratorio/carga IoT liviana, pero puede sentirse más lento."
+    fi
+    if is_compact_storage; then
+        log_warning "Compact-storage permite hosts con poco espacio libre, pero el espacio se puede agotar rápido."
+    fi
+    echo ""
+    echo "Alertas y purga de almacenamiento:"
+    echo "  - Las alertas avisan cuando el disco cruza umbrales de riesgo."
+    echo "  - La purga es una decisión separada: puedes purgar sistema, datos, ambos o nada."
+    read -p "¿Activar alertas de almacenamiento por SSH/logs? [S/n]: " STORAGE_ALERTS_CONFIRM
+    if [[ -z "${STORAGE_ALERTS_CONFIRM:-}" ]] || is_yes "$STORAGE_ALERTS_CONFIRM"; then
+        STORAGE_ALERTS=true
+    else
+        STORAGE_ALERTS=false
+    fi
+    STORAGE_ALERTS_SOURCE="manual"
+
+    echo ""
+    echo "Modo de purga automática cuando el disco esté alto:"
+    echo "  1) system: logs, caches Docker, imágenes colgantes y contenedores detenidos"
+    echo "  2) data: datos históricos de MongoDB y MySQL según retención"
+    echo "  3) both: system + data"
+    echo "  4) none: no purgar automáticamente"
+    read -p "Elige modo de purga [4]: " STORAGE_PURGE_CHOICE
+    case "${STORAGE_PURGE_CHOICE:-4}" in
+        1)
+            STORAGE_PURGE_MODE="system"
+            ;;
+        2)
+            STORAGE_PURGE_MODE="data"
+            ;;
+        3)
+            STORAGE_PURGE_MODE="both"
+            ;;
+        4)
+            STORAGE_PURGE_MODE="none"
+            ;;
+        *)
+            log_error "Opción de purga inválida"
+            exit 1
+            ;;
+    esac
+    STORAGE_PURGE_MODE_SOURCE="manual"
+    validate_storage_purge_mode "$STORAGE_PURGE_MODE" || exit 1
+
+    if [[ "$STORAGE_PURGE_MODE" == "system" || "$STORAGE_PURGE_MODE" == "both" ]]; then
+        SAFE_AUTOPURGE=true
+    else
+        SAFE_AUTOPURGE=false
+    fi
+    SAFE_AUTOPURGE_SOURCE="derived"
+
+    if [[ "$STORAGE_PURGE_MODE" == "data" || "$STORAGE_PURGE_MODE" == "both" ]]; then
+        local retention_default
+        retention_default=$(default_data_retention_days_for_profile)
+        echo ""
+        log_warning "La purga de datos elimina datos históricos, no credenciales ni identidades."
+        log_warning "MongoDB: sensor_readings, device_logs y alerts por timestamp."
+        log_warning "MySQL: historial relacional antiguo y servicios cerrados; no usuarios, admins, dispositivos, roles ni passwords."
+        read -p "Días de retención para purga de datos [${retention_default}]: " DATA_RETENTION_DAYS
+        DATA_RETENTION_DAYS=${DATA_RETENTION_DAYS:-$retention_default}
+        validate_retention_days "$DATA_RETENTION_DAYS" || exit 1
+    else
+        DATA_RETENTION_DAYS=$(default_data_retention_days_for_profile)
+    fi
+
+    local redis_default
+    redis_default=$(default_redis_memory_for_profile)
+    read -p "Límite de memoria Redis [${redis_default}]: " REDIS_MEMORY
+    REDIS_MEMORY=${REDIS_MEMORY:-$redis_default}
+    REDIS_MEMORY=$(printf '%s' "$REDIS_MEMORY" | tr '[:upper:]' '[:lower:]')
+    validate_redis_memory "$REDIS_MEMORY" || { log_error "Límite Redis inválido"; exit 1; }
+
+    MONGO_IMAGE=$(select_mongo_image)
+    if [[ "$MONGO_IMAGE" == "$LEGACY_PI4_MONGO_IMAGE" ]]; then
+        echo ""
+        log_warning "Raspberry Pi 4 legacy mode activo."
+        log_warning "Se usara ${MONGO_IMAGE}. MongoDB 4.4 esta EOL desde 2024-02-29."
+        log_warning "No uses este modo para producción ni exposición pública."
+    fi
     
     # Zona horaria (auto-detectar)
     local detected_tz
     detected_tz=$(timedatectl show -p Timezone --value 2>/dev/null || echo "UTC")
     read -p "Zona horaria [${detected_tz}]: " TIMEZONE
     TIMEZONE=${TIMEZONE:-$detected_tz}
+    validate_timezone "$TIMEZONE" || { log_error "Zona horaria inválida"; exit 1; }
     
     echo ""
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════╗${RESET}"
@@ -350,25 +526,38 @@ collect_user_inputs() {
 show_configuration_summary() {
     echo ""
     show_section_header "Resumen de Configuración"
+    local profile_label autopurge_label alerts_label total_display available_display
+    profile_label=$(effective_profile_label)
+    autopurge_label=$(autopurge_mode_label)
+    alerts_label=$(alerts_mode_label)
+    total_display=$(format_storage_mb "${STORAGE_TOTAL_MB:-$(storage_total_mb)}")
+    available_display=$(format_storage_mb "${STORAGE_AVAILABLE_MB:-$(storage_available_mb)}")
     
     echo -e "
 ${BOLD}Configuración del Sistema:${RESET}
-  IP del VPS:        ${GREEN}${VPS_IP}${RESET}
+  IP del Servidor:   ${GREEN}${VPS_IP}${RESET}
   Nuevo Usuario:     ${GREEN}${NEW_USERNAME}${RESET}
   Puerto SSH:        ${GREEN}${SSH_PORT}${RESET}
   Dominio:           ${GREEN}${DOMAIN}${RESET}
   Zona Horaria:      ${GREEN}${TIMEZONE}${RESET}
+  Perfil Detectado:  ${GREEN}${profile_label}${RESET}
+  Compact Storage:   ${GREEN}${COMPACT_STORAGE}${RESET}
+  Almacenamiento:    ${GREEN}${total_display} total, ${available_display} libres${RESET}
+  Alertas Storage:   ${GREEN}${alerts_label}${RESET}
+  Modo de Purga:     ${GREEN}${autopurge_label}${RESET}
+  Retención Datos:   ${GREEN}${DATA_RETENTION_DAYS} días${RESET}
 
 ${BOLD}Configuración de Base de Datos:${RESET}
   Nombre de BD:      ${GREEN}${DB_NAME}${RESET}
   Subred Docker:     ${GREEN}${DOCKER_SUBNET}${RESET}
   Memoria Redis:     ${GREEN}${REDIS_MEMORY}${RESET}
+  Imagen MongoDB:    ${GREEN}${MONGO_IMAGE:-$DEFAULT_MONGO_IMAGE}${RESET}
 
 ${BOLD}Administrador Principal:${RESET}
   Email:             ${GREEN}${ADMIN_EMAIL}${RESET}
   Contraseña:        ${CYAN}[configurada]${RESET}
 
-${BOLD}Secretos Auto-Generados:${RESET}
+${BOLD}Secretos de Instalación:${RESET}
   Contraseña Root MySQL:   ${CYAN}[generada]${RESET}
   Contraseña Usuario MySQL: ${CYAN}[generada]${RESET}
   Contraseña Redis:         ${CYAN}[generada]${RESET}
@@ -377,6 +566,18 @@ ${BOLD}Secretos Auto-Generados:${RESET}
 ${YELLOW}Los secretos se guardarán en: ${SECRETS_FILE}${RESET}
 ${YELLOW}¡DEBES respaldar este archivo después de la instalación!${RESET}
 "
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${CYAN}En dry-run no se generará ni escribirá el archivo de secretos.${RESET}"
+        echo ""
+    fi
+
+    if is_low_resource_profile; then
+        log_warning "Perfil 2GB RAM: instalación soportada para laboratorio/carga liviana; espera menor margen y posible lentitud."
+    fi
+    if is_compact_storage; then
+        log_warning "Compact-storage: el host tiene almacenamiento pequeño; vigila retención de datos y crecimiento de Docker."
+    fi
     
     if [[ "$DRY_RUN" == true ]]; then
         echo -e "${CYAN}═══ MODO DRY-RUN: No se harán cambios ═══${RESET}"
@@ -403,7 +604,21 @@ save_configuration() {
     # Escapar caracteres especiales en contraseña para evitar inyección
     # Escapa: \ → \\, " → \", $ → \$, ` → \`
     local escaped_password
-    escaped_password=$(printf '%s' "$ADMIN_PASSWORD" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\$/\\$/g' -e 's/`/\\`/g')
+    escaped_password=$(escape_double_quoted_value "$ADMIN_PASSWORD")
+
+    MONGO_IMAGE=${MONGO_IMAGE:-$(select_mongo_image)}
+    SAFE_AUTOPURGE=${SAFE_AUTOPURGE:-false}
+    if [[ "$SAFE_AUTOPURGE" == "auto" ]]; then
+        SAFE_AUTOPURGE=false
+    fi
+    STORAGE_ALERTS=${STORAGE_ALERTS:-true}
+    STORAGE_PURGE_MODE=${STORAGE_PURGE_MODE:-none}
+    DATA_RETENTION_DAYS=${DATA_RETENTION_DAYS:-$(default_data_retention_days_for_profile)}
+    validate_storage_purge_mode "$STORAGE_PURGE_MODE" || exit 1
+    validate_retention_days "$DATA_RETENTION_DAYS" || exit 1
+    STORAGE_TOTAL_MB=${STORAGE_TOTAL_MB:-$(storage_total_mb)}
+    STORAGE_USED_MB=${STORAGE_USED_MB:-$(storage_used_mb)}
+    STORAGE_AVAILABLE_MB=${STORAGE_AVAILABLE_MB:-$(storage_available_mb)}
     
     cat > "$CONFIG_FILE" << EOF
 # Configuración de Instalación de Plataforma IoT
@@ -417,6 +632,22 @@ DB_NAME="$DB_NAME"
 DOCKER_SUBNET="$DOCKER_SUBNET"
 REDIS_MEMORY="$REDIS_MEMORY"
 TIMEZONE="$TIMEZONE"
+MONGO_IMAGE="$MONGO_IMAGE"
+ALLOW_LEGACY_PI4_MONGODB="$ALLOW_LEGACY_PI4_MONGODB"
+RESOURCE_PROFILE="$RESOURCE_PROFILE"
+RESOURCE_PROFILE_SOURCE="$RESOURCE_PROFILE_SOURCE"
+COMPACT_STORAGE="$COMPACT_STORAGE"
+COMPACT_STORAGE_SOURCE="$COMPACT_STORAGE_SOURCE"
+SAFE_AUTOPURGE="$SAFE_AUTOPURGE"
+SAFE_AUTOPURGE_SOURCE="$SAFE_AUTOPURGE_SOURCE"
+STORAGE_ALERTS="$STORAGE_ALERTS"
+STORAGE_ALERTS_SOURCE="$STORAGE_ALERTS_SOURCE"
+STORAGE_PURGE_MODE="$STORAGE_PURGE_MODE"
+STORAGE_PURGE_MODE_SOURCE="$STORAGE_PURGE_MODE_SOURCE"
+DATA_RETENTION_DAYS="$DATA_RETENTION_DAYS"
+STORAGE_TOTAL_MB="$STORAGE_TOTAL_MB"
+STORAGE_USED_MB="$STORAGE_USED_MB"
+STORAGE_AVAILABLE_MB="$STORAGE_AVAILABLE_MB"
 
 # Credenciales de Administrador
 ADMIN_EMAIL="$ADMIN_EMAIL"
@@ -443,6 +674,7 @@ execute_installation() {
         # Cargar configuración
         if [[ -f "$CONFIG_FILE" ]]; then
             source "$CONFIG_FILE"
+            resolve_installation_profiles || exit 1
         else
             log_error "Archivo de configuración no encontrado"
             exit 1
@@ -453,17 +685,32 @@ execute_installation() {
         start_phase=$((LAST_COMPLETED_PHASE + 1))
         log_info "Reanudando desde la Fase $start_phase"
     fi
+
+    local profile_label autopurge_label alerts_label total_display available_display
+    profile_label=$(effective_profile_label)
+    autopurge_label=$(autopurge_mode_label)
+    alerts_label=$(alerts_mode_label)
+    total_display=$(format_storage_mb "${STORAGE_TOTAL_MB:-$(storage_total_mb)}")
+    available_display=$(format_storage_mb "${STORAGE_AVAILABLE_MB:-$(storage_available_mb)}")
     
     # Mostrar plan de instalación
     show_section_header "Plan de Instalación"
     echo "
 Total de fases: 14 (FASE 0 - FASE 13)
-Tiempo estimado: ~3 horas 15 minutos
+Tiempo estimado: 10 a 20 minutos en standard; low-resource o compact-storage puede tardar más
 Iniciando desde: Fase $start_phase
+Perfil detectado: ${profile_label}
+Compact storage: ${COMPACT_STORAGE}
+Almacenamiento: ${total_display} total, ${available_display} libres
+Alertas storage: ${alerts_label}
+Modo de purga: ${autopurge_label}
+Retención datos: ${DATA_RETENTION_DAYS:-$(default_data_retention_days_for_profile)} días
 "
     
     # Generar secretos si no existen
-    if [[ ! -f "$SECRETS_FILE" ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+        log_info "[DRY-RUN] No se generarán ni escribirán secretos"
+    elif [[ ! -f "$SECRETS_FILE" ]]; then
         generate_all_secrets
     fi
     
@@ -530,109 +777,105 @@ show_completion_message() {
     
     local duration
     duration=$(calculate_duration)
-    
-    # Obtener la contraseña temporal para mostrar
-    local temp_pass=""
-    if [[ -f "$SECRETS_FILE" ]]; then
-        temp_pass=$(grep 'TEMP_USER_PASSWORD=' "$SECRETS_FILE" 2>/dev/null | cut -d'"' -f2)
+    local profile_label autopurge_label alerts_label total_display available_display summary_file
+    local final_total_mb final_available_mb
+    profile_label=$(effective_profile_label)
+    autopurge_label=$(autopurge_mode_label)
+    alerts_label=$(alerts_mode_label)
+    final_total_mb=$(storage_total_mb 2>/dev/null || echo "${STORAGE_TOTAL_MB:-0}")
+    final_available_mb=$(storage_available_mb 2>/dev/null || echo "${STORAGE_AVAILABLE_MB:-0}")
+    [[ "$final_total_mb" =~ ^[0-9]+$ ]] || final_total_mb="${STORAGE_TOTAL_MB:-0}"
+    [[ "$final_available_mb" =~ ^[0-9]+$ ]] || final_available_mb="${STORAGE_AVAILABLE_MB:-0}"
+    total_display=$(format_storage_mb "$final_total_mb")
+    available_display=$(format_storage_mb "$final_available_mb")
+    summary_file="${INSTALL_DIR:-$SCRIPT_DIR}/INSTALLATION-SUMMARY.txt"
+
+    if [[ -d "${INSTALL_DIR:-}" ]]; then
+        cat > "$summary_file" << SUMMARYEOF
+Auto-IoTServer v${PLATFORM_VERSION} - Resumen de instalación
+Fecha: $(date -Iseconds)
+
+Estado: EXITO
+Duración total: $duration
+Fases completadas: 14 de 14
+Perfil detectado: $profile_label
+Compact storage: $COMPACT_STORAGE
+  Almacenamiento actual: $total_display total, $available_display libres
+Alertas storage: $alerts_label
+Modo de purga: $autopurge_label
+Retención datos: ${DATA_RETENTION_DAYS:-N/A} días
+
+SSH:
+ssh ${NEW_USERNAME}@${VPS_IP} -p ${SSH_PORT}
+
+API:
+Base: http://${VPS_IP}/api/v1
+Health: http://${VPS_IP}/health
+
+Secretos:
+$SECRETS_FILE
+
+Administrador:
+Email: ${ADMIN_EMAIL}
+Contraseña: la que configuraste durante la instalación.
+
+Post-instalación recomendada:
+1. Respaldar el archivo de secretos.
+2. Cambiar la contraseña del usuario ${NEW_USERNAME}.
+3. Eliminar usuarios de prueba si esto no es laboratorio.
+4. Configurar SSL/TLS antes de producción.
+5. Verificar que los contenedores sigan healthy tras reboot.
+
+Log de instalación:
+$LOG_FILE
+SUMMARYEOF
+        chown "$NEW_USERNAME:$NEW_USERNAME" "$summary_file" 2>/dev/null || true
+        chmod 600 "$summary_file" 2>/dev/null || true
     fi
     
-    clear
     show_banner "Plataforma IoT con Seguridad Integrada"
-    
-    echo -e "
-${GREEN}+===================================================================+
-|                                                                   |
-|            INSTALACION COMPLETADA EXITOSAMENTE                    |
-|                                                                   |
-+===================================================================+${RESET}
 
-  Duracion total:     ${duration}
-  Fases completadas:  14 de 14
-  Estado:             ${GREEN}EXITO${RESET}
-
-
-${GREEN}+-------------------------------------------------------------------+
-|  USUARIO DEBIAN - ELIMINACION AUTOMATICA                         |
-+-------------------------------------------------------------------+${RESET}
-
-  El usuario ${YELLOW}debian${RESET} será eliminado automáticamente en ~90 segundos.
-  No necesitas hacer nada - el sistema se encargará (solo asegurate de no reiniciar ni apagar el servidor en ese tiempo).
-
-  Para reconectar después, usa:
-
-      ${CYAN}ssh ${NEW_USERNAME}@${VPS_IP} -p ${SSH_PORT}${RESET}
-      Contraseña: ${GREEN}${temp_pass:-[ver archivo de secretos]}${RESET}
-
-
-${RED}+-------------------------------------------------------------------+
-|  RESPALDAR SECRETOS (CRITICO)                                    |
-+-------------------------------------------------------------------+${RESET}
-
-  El archivo de secretos contiene TODAS las contrasenas generadas.
-  Si pierdes este archivo, perderas acceso a la base de datos.
-
-  Ubicacion:  ${BOLD}${SECRETS_FILE}${RESET}
-
-  Ejecuta para ver y respaldar tus secretos:
-
-    ${CYAN}cat ${SECRETS_FILE}${RESET}
-
-
-${YELLOW}+-------------------------------------------------------------------+
-|  CREDENCIALES DE ACCESO                                           |
-+-------------------------------------------------------------------+${RESET}
-
-  ${BOLD}Administrador Principal:${RESET}
-    Email:       ${GREEN}${ADMIN_EMAIL}${RESET}
-    Contrasena:  ${CYAN}[la que configuraste]${RESET}
-
-  ${BOLD}Usuarios de Prueba (opcional, eliminar en produccion):${RESET}
-    gerente@iot-platform.local / password123
-    user@iot-platform.local    / password123
-
-
-${BLUE}+-------------------------------------------------------------------+
-|  COMO ACCEDER A TU PLATAFORMA                                     |
-+-------------------------------------------------------------------+${RESET}
-
-  ${BOLD}Conexion SSH (administracion del servidor):${RESET}
-
-    ssh ${NEW_USERNAME}@${VPS_IP} -p ${SSH_PORT}
-
-  ${BOLD}API REST (integracion de aplicaciones):${RESET}
-
-    Endpoint base:    http://${VPS_IP}/api/v1
-    Verificar estado: http://${VPS_IP}/health
-
-  ${BOLD}Probar autenticacion:${RESET}
-
-    curl -X POST http://${VPS_IP}/api/v1/auth/login/admin \\
-      -H \"Content-Type: application/json\" \\
-      -d '{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"TU_CONTRASENA\"}'
-
-
-${CYAN}+-------------------------------------------------------------------+
-|  PROXIMOS PASOS RECOMENDADOS                                      |
-+-------------------------------------------------------------------+${RESET}
-
-  1. Cambiar la contrasena del usuario ${NEW_USERNAME}
-  2. Respaldar el archivo de secretos (ver arriba)
-  3. Eliminar usuarios de prueba (gerente@iot-platform.local, user@iot-platform.local)
-  4. Configurar certificado SSL/TLS para conexiones seguras
-  5. Verificar eliminación de debian: ${CYAN}id debian${RESET} (debe dar error)
-
-
-${WHITE}+-------------------------------------------------------------------+
-|  DOCUMENTACION Y SOPORTE                                          |
-+-------------------------------------------------------------------+${RESET}
-
-  Log de instalacion:  ${LOG_FILE}
-
-${GREEN}====================================================================${RESET}
-${BOLD}          Gracias por usar el instalador de Plataforma IoT          ${RESET}
-${GREEN}====================================================================${RESET}
-"
+    printf '%b\n' "${GREEN}+===================================================================+${RESET}"
+    printf '%b\n' "${GREEN}|            INSTALACION COMPLETADA EXITOSAMENTE                    |${RESET}"
+    printf '%b\n' "${GREEN}+===================================================================+${RESET}"
+    printf '\n'
+    printf '  Duracion total:     %s\n' "$duration"
+    printf '  Fases completadas:  14 de 14\n'
+    printf '  Estado:             EXITO\n'
+    printf '  Perfil detectado:   %s\n' "$profile_label"
+    printf '  Compact storage:    %s\n' "$COMPACT_STORAGE"
+    printf '  Almacenamiento:     %s total, %s libres (actual)\n' "$total_display" "$available_display"
+    printf '  Alertas storage:    %s\n' "$alerts_label"
+    printf '  Modo de purga:      %s\n' "$autopurge_label"
+    printf '  Retencion datos:    %s dias\n' "${DATA_RETENTION_DAYS:-N/A}"
+    printf '  Nota recursos:      2GB RAM puede ir mas lento; 8GB total puede agotarse rapido\n'
+    printf '\n'
+    printf '%b\n' "${YELLOW}+-------------------------------------------------------------------+${RESET}"
+    printf '%b\n' "${YELLOW}|  ACCESO Y SECRETOS                                                |${RESET}"
+    printf '%b\n' "${YELLOW}+-------------------------------------------------------------------+${RESET}"
+    printf '  SSH:        ssh %s@%s -p %s\n' "$NEW_USERNAME" "$VPS_IP" "$SSH_PORT"
+    printf '  API:        http://%s/api/v1\n' "$VPS_IP"
+    printf '  Health:     http://%s/health\n' "$VPS_IP"
+    printf '  Secretos:   %s\n' "$SECRETS_FILE"
+    printf '  Resumen:    %s\n' "$summary_file"
+    printf '\n'
+    printf '%b\n' "${RED}+-------------------------------------------------------------------+${RESET}"
+    printf '%b\n' "${RED}|  RESPALDAR SECRETOS                                               |${RESET}"
+    printf '%b\n' "${RED}+-------------------------------------------------------------------+${RESET}"
+    printf '  Ejecuta:    cat %s\n' "$SECRETS_FILE"
+    printf '  Sin ese archivo no podras recuperar las credenciales generadas.\n'
+    printf '\n'
+    printf '%b\n' "${CYAN}+-------------------------------------------------------------------+${RESET}"
+    printf '%b\n' "${CYAN}|  PROXIMOS PASOS                                                   |${RESET}"
+    printf '%b\n' "${CYAN}+-------------------------------------------------------------------+${RESET}"
+    printf '  1. Cambiar la contrasena del usuario %s.\n' "$NEW_USERNAME"
+    printf '  2. Eliminar usuarios de prueba si no es laboratorio.\n'
+    printf '  3. Configurar SSL/TLS antes de produccion.\n'
+    printf '  4. Verificar tras reboot: docker compose ps y curl -s http://localhost/health.\n'
+    printf '  5. Verificar eliminacion de debian: id debian.\n'
+    printf '\n'
+    printf '  Log de instalacion: %s\n' "$LOG_FILE"
+    printf '%b\n' "${GREEN}+===================================================================+${RESET}"
 }
 
 ################################################################################
@@ -671,11 +914,16 @@ calculate_duration() {
 # Ejecución Principal
 ################################################################################
 main() {
+    parse_arguments "$@"
+
+    if [[ "$DRY_RUN" == true ]]; then
+        LOG_FILE="${TMPDIR:-/tmp}/auto-iotserver-dry-run-$(date +%Y%m%d-%H%M%S).log"
+    fi
+
     mkdir -p "$(dirname "$LOG_FILE")"
     exec > >(tee -a "$LOG_FILE")
     exec 2>&1
     
-    parse_arguments "$@"
     preflight_checks
     
     # Si es internal-resume, cargar config y continuar directamente
@@ -708,15 +956,16 @@ main() {
         fi
         log_info "Cargando configuración guardada..."
         [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
+        resolve_installation_profiles || exit 1
+        validate_resource_profile "$RESOURCE_PROFILE" || exit 1
     else
         collect_user_inputs
         show_configuration_summary
         
-        # Guardar config si NO existe O si NO estamos en dry-run con config existente
         if [[ "$DRY_RUN" != true ]]; then
             save_configuration
-        elif [[ ! -f "$CONFIG_FILE" ]]; then
-            save_configuration
+        else
+            log_info "[DRY-RUN] No se guardará .config.env ni se escribirán secretos"
         fi
     fi
     

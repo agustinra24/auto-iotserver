@@ -121,7 +121,7 @@ server {
     location /nginx_status {
         stub_status on;
         access_log off;
-        allow 172.20.0.0/16;
+        allow {{DOCKER_SUBNET}};
         deny all;
     }
 }

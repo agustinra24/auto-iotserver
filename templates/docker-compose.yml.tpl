@@ -18,6 +18,10 @@ services:
     image: mysql:8.0
     container_name: iot-mysql
     restart: unless-stopped
+    command: {{MYSQL_COMMAND}}
+    mem_limit: {{MYSQL_MEM_LIMIT}}
+    mem_reservation: {{MYSQL_MEM_RESERVATION}}
+    cpus: "{{MYSQL_CPUS}}"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -29,8 +33,7 @@ services:
       - ./mysql-init:/docker-entrypoint-initdb.d:ro
       - ./logs/mysql:/var/log/mysql
     networks:
-      iot-network:
-        ipv4_address: 172.20.0.10
+      - iot-network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
@@ -40,16 +43,20 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '{{MYSQL_CPUS}}'
+          memory: {{MYSQL_MEM_LIMIT}}
 
   # ==========================================================================
   # MongoDB - Datos de Sensores (ACTIVO)
   # ==========================================================================
   mongodb:
-    image: mongo:7.0
+    image: {{MONGO_IMAGE}}
     container_name: iot-mongodb
     restart: unless-stopped
+    command: {{MONGO_COMMAND}}
+    mem_limit: {{MONGO_MEM_LIMIT}}
+    mem_reservation: {{MONGO_MEM_RESERVATION}}
+    cpus: "{{MONGO_CPUS}}"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
@@ -59,10 +66,9 @@ services:
       - ./mongo-data:/data/db
       - ./logs/mongodb:/var/log/mongodb
     networks:
-      iot-network:
-        ipv4_address: 172.20.0.11
+      - iot-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "if command -v mongosh >/dev/null 2>&1; then mongosh --quiet --eval \"db.adminCommand('ping').ok\"; else mongo --quiet --eval \"db.adminCommand('ping').ok\"; fi"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,8 +76,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '{{MONGO_CPUS}}'
+          memory: {{MONGO_MEM_LIMIT}}
 
   # ==========================================================================
   # Redis - Sesiones y Caché
@@ -80,19 +86,21 @@ services:
     image: redis:7-alpine
     container_name: iot-redis
     restart: unless-stopped
+    mem_limit: {{REDIS_MEM_LIMIT}}
+    mem_reservation: {{REDIS_MEM_RESERVATION}}
+    cpus: "{{REDIS_CPUS}}"
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD}
       --appendonly yes
       --appendfilename "appendonly.aof"
-      --maxmemory 256mb
+      --maxmemory {{REDIS_MEMORY}}
       --maxmemory-policy allkeys-lru
     volumes:
       - ./redis-data:/data
       - ./logs/redis:/var/log/redis
     networks:
-      iot-network:
-        ipv4_address: 172.20.0.12
+      - iot-network
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -101,8 +109,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '{{REDIS_CPUS}}'
+          memory: {{REDIS_MEM_LIMIT}}
 
   # ==========================================================================
   # FastAPI - Aplicación
@@ -113,6 +121,10 @@ services:
       dockerfile: Dockerfile
     container_name: iot-fastapi
     restart: unless-stopped
+    command: {{FASTAPI_COMMAND}}
+    mem_limit: {{FASTAPI_MEM_LIMIT}}
+    mem_reservation: {{FASTAPI_MEM_RESERVATION}}
+    cpus: "{{FASTAPI_CPUS}}"
     environment:
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
@@ -140,8 +152,7 @@ services:
       - ./fastapi-app:/app:ro
       - ./logs/fastapi:/var/log/fastapi
     networks:
-      iot-network:
-        ipv4_address: 172.20.0.20
+      - iot-network
     depends_on:
       mysql:
         condition: service_healthy
@@ -158,8 +169,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 1G
+          cpus: '{{FASTAPI_CPUS}}'
+          memory: {{FASTAPI_MEM_LIMIT}}
 
   # ==========================================================================
   # Nginx - Proxy Inverso
@@ -168,6 +179,9 @@ services:
     image: nginx:1.25-alpine
     container_name: iot-nginx
     restart: unless-stopped
+    mem_limit: {{NGINX_MEM_LIMIT}}
+    mem_reservation: {{NGINX_MEM_RESERVATION}}
+    cpus: "{{NGINX_CPUS}}"
     ports:
       - "80:80"
       - "443:443"
@@ -178,8 +192,7 @@ services:
       - ./web-flasher:/usr/share/nginx/web-flasher:ro
       - ./logs/nginx:/var/log/nginx
     networks:
-      iot-network:
-        ipv4_address: 172.20.0.30
+      - iot-network
     depends_on:
       fastapi:
         condition: service_healthy
@@ -191,5 +204,5 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 128M
+          cpus: '{{NGINX_CPUS}}'
+          memory: {{NGINX_MEM_LIMIT}}

@@ -33,7 +33,7 @@ def main():
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("  IoT Device Firmware v2.0")
+    print("  IoT Device Firmware V1.3")
     print("  Puzzle Auth + FastAPI compatible")
     print("=" * 50)
     main()

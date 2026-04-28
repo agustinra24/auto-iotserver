@@ -232,9 +232,11 @@ Cada fase incluye checkpoints. Si la instalación se interrumpe, es posible rean
 
 Entre 10 y 20 minutos en perfil estándar, dependiendo de la velocidad del servidor y la latencia de red. En 2 GB de RAM o medios compactos puede tardar más.
 
-### Evidencia de Validación V1.3
+### Evidencia de Validación V1.3 RC1
 
-V1.3 fue validado en una VM Debian 13.4 ARM64 con 2 GB de RAM nominales y perfil `compact-storage`. La instalación completó 14 de 14 fases; después se verificaron 5 contenedores `healthy`, `/health` local y LAN, bases de datos no expuestas al host, `OOMKilled=false`, `RestartCount=0`, Docker, Fail2Ban y nftables activos, y recuperación correcta tras reboot.
+V1.3 RC1 fue validado en una VM Debian 13.4 ARM64 netinst virgen con 2 GB de RAM nominales y perfil `compact-storage`. La instalación completó 14 de 14 fases en `00:58:49`; después se verificaron 5 contenedores `healthy`, `/health` local y LAN, bases de datos no expuestas al host, `OOMKilled=false`, `RestartCount=0`, Docker, Fail2Ban y nftables activos, ausencia de OOM en kernel y recuperación correcta tras reboot.
+
+La duración elevada de esa prueba se debió a red lenta durante un Docker build frío, especialmente al descargar paquetes Debian y dependencias Python dentro de la imagen FastAPI. No se observó presión de RAM: la VM mantuvo memoria disponible, swap casi intacto durante la instalación y swap en 0 B después del reboot.
 
 Esta validación cubre laboratorio, demo y cargas IoT livianas. No sustituye pruebas de carga ni endurecimiento adicional para producción pública.
 

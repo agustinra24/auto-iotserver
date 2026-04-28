@@ -1,4 +1,4 @@
-## MicroPython Web Flasher — Documentacion Tecnica
+## MicroPython Web Flasher - Documentacion Tecnica
 
 Herramienta de despliegue, configuracion y gestion para firmware IoT en ESP32, ejecutable desde el navegador (Chrome/Edge) sin instalar software adicional. Forma parte de auto-iotserver.
 

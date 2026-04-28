@@ -1,4 +1,4 @@
-## Firmware MicroPython para ESP32 (IoT Device) — V1.3
+## Firmware MicroPython para ESP32 (IoT Device) - V1.3
 
 Firmware modular para ESP32 que se comunica con la API FastAPI del auto-iotserver. Lee sensores de temperatura, humedad y ruido, controla actuadores (LED semaforo, IR) con logica local, y envia telemetria al servidor usando autenticacion criptografica de puzzle (HMAC-SHA256 + AES-256-CBC) con tokens JWT. Incluye toggle fisico (GPIO 0 / BOOT) para pausar/reanudar el envio de datos sin detener la lectura de sensores.
 
@@ -66,7 +66,7 @@ flowchart TD
     %% ══════════════════════════════════════════════
     %% FASE 1: ARRANQUE
     %% ══════════════════════════════════════════════
-    subgraph F1["FASE 1 — ARRANQUE"]
+    subgraph F1["FASE 1 - ARRANQUE"]
         S1["<b>1 · main.py</b><br/>Entry point"]
         S2["<b>2 · config_manager.py</b><br/>Carga config, valida keys<br/>Decodifica hex → 32 bytes"]
         DB[("<b>config.json</b><br/>Credenciales, WiFi<br/>server URL, umbrales")]
@@ -78,12 +78,12 @@ flowchart TD
     %% ══════════════════════════════════════════════
     %% FASE 2: INICIALIZACION DE SUBSISTEMAS
     %% ══════════════════════════════════════════════
-    subgraph F2["FASE 2 — INICIALIZACION"]
+    subgraph F2["FASE 2 - INICIALIZACION"]
         S3["<b>3 · Device.py</b><br/>Orquestador central"]
         S4["<b>4 · WifiControl.py</b><br/>WiFi STA, 3 reintentos<br/>Backoff 15s / 20s / 30s"]
         S5["<b>5 · NTP sync</b><br/>Reloj UTC via ntptime<br/><i>No-fatal si falla</i>"]
-        S6["<b>6 · Sensores</b><br/>temperature_sensor.py — DHT11<br/>microphone_sensor.py — MAX4466"]
-        S7["<b>7 · Actuadores</b><br/>led_semaphore.py — LED RGB<br/>IR_send.py — IR 38kHz"]
+        S6["<b>6 · Sensores</b><br/>temperature_sensor.py - DHT11<br/>microphone_sensor.py - MAX4466"]
+        S7["<b>7 · Actuadores</b><br/>led_semaphore.py - LED RGB<br/>IR_send.py - IR 38kHz"]
         S7b["<b>8 · button_toggle.py</b><br/>GPIO 0 (BOOT)<br/>Pausa/reanuda envio"]
 
         S3 --> S4 --> S5 --> S6 --> S7 --> S7b
@@ -92,7 +92,7 @@ flowchart TD
     %% ══════════════════════════════════════════════
     %% AUTENTICACION: PUZZLE CRIPTOGRAFICO
     %% ══════════════════════════════════════════════
-    subgraph AUTH["AUTENTICACION — Puzzle Criptografico"]
+    subgraph AUTH["AUTENTICACION - Puzzle Criptografico"]
         S8["<b>9 · puzzle_auth.py</b><br/>R2 = 32 bytes aleatorios<br/>Orquesta protocolo completo"]
 
         HMAC["<b>hmac_sha256.py</b><br/>HMAC-SHA256 segun RFC 2104<br/><i>Impl. manual: MicroPython<br/>no tiene modulo hmac</i>"]
@@ -114,7 +114,7 @@ flowchart TD
     %% ══════════════════════════════════════════════
     %% FASE 3: LOOP DE TELEMETRIA
     %% ══════════════════════════════════════════════
-    subgraph F3["FASE 3 — LOOP DE TELEMETRIA · repite cada N segundos"]
+    subgraph F3["FASE 3 - LOOP DE TELEMETRIA · repite cada N segundos"]
         direction LR
         L1{"WiFi OK?<br/><i>reconnect si no</i>"}
         L2["Leer sensores<br/>3x temp/hum<br/>5x ruido"]
